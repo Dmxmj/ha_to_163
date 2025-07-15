@@ -1,0 +1,75 @@
+{
+  "name": "HA to 163 Gateway",
+  "version": "0.1.0",
+  "slug": "ha_to_163",
+  "description": "将Home Assistant传感器数据推送到网易IoT平台，支持多设备类型自动发现",
+  "arch": ["amd64", "armv7", "aarch64", "i386"],
+  "url": "https://github.com/Dmxmj/ha-addon-163-gateway/tree/main",
+  "startup": "application",
+  "boot": "auto",
+  "options": {
+    "ha_url": "http://homeassistant:8123",
+    "ha_token": "",
+    "use_ssl": false,
+    "gateway_product_key": "",
+    "gateway_device_name": "",
+    "gateway_device_secret": "",
+    "sub_devices": [
+      {
+        "id": "sensor_001",
+        "product_key": "",
+        "device_name": "",
+        "device_secret": "",
+        "ha_entity_prefix": "sensor.hz2_01_",
+        "supported_properties": ["temp", "hum", "batt"],
+        "enabled": true
+      }
+    ],
+    "ha_discovery_interval": 3600,
+    "wy_push_interval": 60,
+    "startup_delay": 120,
+    "entity_ready_timeout": 600,
+    "retry_attempts": 5,
+    "retry_delay": 3,
+    "ntp_server": "ntp.n.netease.com",
+    "wy_mqtt_broker": "device.iot.163.com",
+    "wy_mqtt_port_tcp": 1883,
+    "wy_mqtt_port_ssl": 8883,
+    "log_level": "info"
+  },
+  "schema": {
+    "ha_url": "str",
+    "ha_token": "str",
+    "use_ssl": "bool",
+    "gateway_product_key": "str",
+    "gateway_device_name": "str",
+    "gateway_device_secret": "str",
+    "sub_devices": [
+      {
+        "id": "str",
+        "product_key": "str",
+        "device_name": "str",
+        "device_secret": "str",
+        "ha_entity_prefix": "str",
+        "supported_properties": ["str"],
+        "enabled": "bool"
+      }
+    ],
+    "ha_discovery_interval": "int",
+    "wy_push_interval": "int",
+    "startup_delay": "int",
+    "entity_ready_timeout": "int",
+    "retry_attempts": "int",
+    "retry_delay": "int",
+    "ntp_server": "str",
+    "wy_mqtt_broker": "str",
+    "wy_mqtt_port_tcp": "int",
+    "wy_mqtt_port_ssl": "int",
+    "log_level": "enum(info,debug,warning,error,critical)"
+  },
+  "ingress": false,
+  "host_network": false,
+  "ports": {},
+  "map": ["config", "ssl", "share"]
+}
+    
