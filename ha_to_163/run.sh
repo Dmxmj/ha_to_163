@@ -1,10 +1,12 @@
 #!/bin/sh
 set -e
 
-# 检查关键模块是否安装
-echo "检查依赖安装情况..."
-python3 -c "import requests; import paho.mqtt; import ntplib; print('依赖检查通过')"
+# 再次确认依赖
+echo "验证依赖是否安装..."
+if ! python3 -c "import requests"; then
+    echo "紧急安装 requests..."
+    pip3 install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple requests==2.31.0
+fi
 
-# 启动主程序
 echo "===== HA to 163 Gateway 启动 ====="
 python3 /app/main.py
