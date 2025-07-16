@@ -1,5 +1,4 @@
-ARG BUILD_FROM=homeassistant/${TARGETARCH}-base:3.18
-FROM ${BUILD_FROM}
+FROM homeassistant/aarch64-base:3.18
 
 WORKDIR /app
 
