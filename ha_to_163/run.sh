@@ -1,9 +1,10 @@
-#!/bin/bash
+#!/bin/sh
+set -e
 
-# 设置日志级别
+echo "===== HA to 163 Gateway 启动 ====="
+
 LOG_LEVEL=${LOG_LEVEL:-info}
 
-# 转换日志级别为Python可用格式
 case "$LOG_LEVEL" in
   "debug") LOG_LEVEL_PYTHON="DEBUG" ;;
   "info") LOG_LEVEL_PYTHON="INFO" ;;
@@ -13,9 +14,7 @@ case "$LOG_LEVEL" in
   *) LOG_LEVEL_PYTHON="INFO" ;;
 esac
 
-# 设置环境变量
 export LOG_LEVEL=$LOG_LEVEL_PYTHON
 
-# 启动应用
-python main.py
+python3 /app/main.py
     
