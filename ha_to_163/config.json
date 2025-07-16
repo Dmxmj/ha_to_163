@@ -65,7 +65,7 @@
     "wy_mqtt_broker": "str",
     "wy_mqtt_port_tcp": "int",
     "wy_mqtt_port_ssl": "int",
-    "log_level": "enum(info,debug,warning,error,critical)"
+    "log_level": "match(info|debug|warning|error|critical)"  // 修正此处：用match替代enum
   },
   "ingress": false,
   "host_network": false,
