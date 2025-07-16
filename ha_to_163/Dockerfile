@@ -1,5 +1,5 @@
-# 使用Home Assistant官方基础镜像（自动适配架构）
-FROM homeassistant/{arch}-base:3.18
+# 使用Home Assistant官方基础镜像（正确的架构变量格式）
+FROM ${BUILD_ARCH}/base:3.18
 
 # 设置环境变量
 ENV LANG C.UTF-8
@@ -22,3 +22,4 @@ RUN chmod +x /app/run.sh
 
 # 容器启动命令（固定执行启动脚本）
 CMD ["/app/run.sh"]
+ 
