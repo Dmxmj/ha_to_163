@@ -22,4 +22,4 @@ RUN chmod +x /app/run.sh
 
 # 容器启动命令（固定执行启动脚本）
 CMD ["/app/run.sh"]
- 
+  
