@@ -4,10 +4,12 @@ import time
 import hmac
 import hashlib
 import json
+import requests
 from typing import Dict, Any
 
+
 class MQTTClient:
-    """网易IoT平台MQTT客户端（修正上报Topic格式）"""
+    """网易IoT平台MQTT客户端（支持指令接收与设备控制）"""
     
     def __init__(self, config: Dict[str, Any]):
         self.config = config
@@ -16,6 +18,11 @@ class MQTTClient:
         self.connected = False
         self.last_time_sync = 0  # 用于时间同步
         self.reconnect_delay = 1  # 重连延迟（秒）
+        # 初始化HA请求头（用于控制HA实体）
+        self.ha_headers = {
+            "Authorization": f"Bearer {self.config['ha_token']}",
+            "Content-Type": "application/json"
+        }
     
     def _init_mqtt_client(self):
         """初始化MQTT客户端（复用提供的密码生成逻辑）"""
@@ -105,13 +112,18 @@ class MQTTClient:
             self.reconnect_delay = 1  # 重置重连延迟
             self.logger.info(f"MQTT连接成功（返回码: {rc}）")
             
-            # 订阅子设备的控制Topic（格式：sys/{子设备productkey}/{子设备devicename}/thing/service/property/set）
+            # 订阅子设备的控制Topic（支持两种格式：标准格式和扩展格式）
             for device in self.config.get("sub_devices", []):
                 if not device.get("enabled", True):
                     continue
-                set_topic = f"sys/{device['product_key']}/{device['device_name']}/thing/service/property/set"
-                client.subscribe(set_topic, qos=1)
-                self.logger.info(f"订阅控制Topic: {set_topic}")
+                # 标准控制Topic（thing/service/property/set）
+                standard_set_topic = f"sys/{device['product_key']}/{device['device_name']}/thing/service/property/set"
+                # 扩展控制Topic（service/CommonService）
+                common_service_topic = f"sys/{device['product_key']}/{device['device_name']}/service/CommonService"
+                client.subscribe(standard_set_topic, qos=1)
+                client.subscribe(common_service_topic, qos=1)
+                self.logger.info(f"订阅控制Topic: {standard_set_topic}")
+                self.logger.info(f"订阅控制Topic: {common_service_topic}")
         else:
             self.connected = False
             self.logger.error(f"MQTT连接失败（返回码: {rc}）")
@@ -134,12 +146,85 @@ class MQTTClient:
         self.connect()
     
     def _on_message(self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage):
-        """处理收到的消息"""
+        """处理收到的消息（新增指令解析与执行）"""
         try:
             payload = json.loads(msg.payload.decode())
             self.logger.info(f"收到消息: {msg.topic} → {json.dumps(payload, indent=2)}")
+            
+            # 解析Topic，提取产品密钥和设备名称
+            topic_parts = msg.topic.split('/')
+            if len(topic_parts) >= 3 and topic_parts[0] == "sys":
+                product_key = topic_parts[1]
+                device_name = topic_parts[2]
+                self._handle_control_command(product_key, device_name, payload)
+            
         except Exception as e:
             self.logger.error(f"解析消息失败: {e}，原始消息: {msg.payload.decode()}")
+    
+    def _handle_control_command(self, product_key: str, device_name: str, payload: dict):
+        """处理控制指令，调用HA API执行操作"""
+        # 1. 查找匹配的子设备
+        target_device = None
+        for device in self.config.get("sub_devices", []):
+            if (device.get("product_key") == product_key and 
+                device.get("device_name") == device_name and 
+                device.get("enabled", True)):
+                target_device = device
+                break
+        if not target_device:
+            self.logger.warning(f"未找到设备: product_key={product_key}, device_name={device_name}")
+            return
+        
+        # 2. 提取控制参数（兼容两种格式的payload）
+        target_params = None
+        # 格式1: {"params": {"state": 1}, ...}（标准格式）
+        if "params" in payload:
+            target_params = payload["params"]
+        # 格式2: 直接在根节点包含参数（扩展格式）
+        else:
+            target_params = payload
+        
+        # 3. 处理开关设备的状态控制
+        if target_device["type"] == "switch" and "state" in target_params:
+            self._control_switch(target_device, target_params["state"])
+    
+    def _control_switch(self, device: dict, target_state: int):
+        """控制开关设备（调用HA API切换状态）"""
+        # 转换状态格式（1→on，0→off）
+        ha_state = "on" if target_state == 1 else "off"
+        self.logger.info(f"控制开关 {device['id']} 状态为: {ha_state}")
+        
+        # 查找对应的HA实体
+        entity_prefix = device["ha_entity_prefix"]
+        # 从已发现的实体中匹配（这里简化处理，实际应从matched_devices中获取）
+        # 实际场景中建议通过device_id关联到main.py中的matched_devices
+        entity_id = f"{entity_prefix}state"  # 假设实体ID为前缀+state
+        
+        # 调用HA API执行开关操作
+        try:
+            response = requests.post(
+                f"{self.config['ha_url']}/api/services/switch/turn_{ha_state}",
+                headers=self.ha_headers,
+                json={"entity_id": entity_id},
+                timeout=10
+            )
+            if response.status_code == 200:
+                self.logger.info(f"成功控制HA实体 {entity_id} 为 {ha_state}")
+                # 控制成功后可主动上报状态（可选）
+                self._report_switch_state(device, target_state)
+            else:
+                self.logger.error(f"控制HA实体失败，状态码: {response.status_code}，响应: {response.text}")
+        except Exception as e:
+            self.logger.error(f"调用HA API失败: {e}")
+    
+    def _report_switch_state(self, device: dict, state: int):
+        """控制后主动上报开关状态（可选）"""
+        payload = {
+            "id": int(time.time() * 1000),
+            "version": "1.0",
+            "params": {"state": state}
+        }
+        self.publish(device, payload)
     
     def publish(self, device: Dict[str, Any], payload: Dict[str, Any]) -> bool:
         """发布设备数据（修正上报Topic格式）"""
