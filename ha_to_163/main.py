@@ -58,13 +58,13 @@ class HAto163Gateway:
         return False
 
     def _discover_devices(self) -> bool:
-        """执行设备发现（支持多类型）"""
+        """执行设备发现（支持多类型，包括breaker）"""
         discovery = HADiscovery(self.config, self.ha_headers)
         self.matched_devices = discovery.discover()
         return len(self.matched_devices) > 0
 
     def _get_entity_value(self, entity_id: str, device_type: str) -> float or int or None:
-        """获取HA实体值（适配多设备类型：数值/开关状态）"""
+        """获取HA实体值（适配多设备类型：新增breaker支持）"""
         try:
             # 等待实体就绪
             timeout = self.config.get("entity_ready_timeout", 600)
@@ -81,11 +81,16 @@ class HAto163Gateway:
                         time.sleep(5)
                         continue
 
-                    # 处理开关/插座状态（on→1，off→0）
-                    if device_type in ("switch", "socket") and state in ("on", "off"):
-                        return 1 if state == "on" else 0
+                    # 处理开关/插座/断路器状态（on→1，off→0，trip→2）
+                    if device_type in ("switch", "socket", "breaker"):
+                        if state == "on":
+                            return 1
+                        elif state == "off":
+                            return 0
+                        elif state == "trip" and device_type == "breaker":  # 断路器跳闸状态
+                            return 2
 
-                    # 处理数值型（传感器/插座电流功率等）
+                    # 处理数值型（传感器/插座/断路器的电流、电压等）
                     import re
                     match = re.search(r'[-+]?\d*\.\d+|\d+', state)
                     if match:
@@ -103,7 +108,7 @@ class HAto163Gateway:
             return None
 
     def _collect_device_data(self, device_id: str) -> dict:
-        """收集设备数据（按类型处理）"""
+        """收集设备数据（按类型处理，新增breaker）"""
         device_data = self.matched_devices[device_id]
         device_config = device_data["config"]
         device_type = device_config["type"]
@@ -128,10 +133,15 @@ class HAto163Gateway:
             self.logger.warning(f"  未获取到电池数据，使用默认值100")
             payload["params"]["batt"] = 100
 
+        # 断路器默认状态处理（未获取到状态时默认为off）
+        if device_type == "breaker" and "state" in device_config["supported_properties"] and "state" not in payload["params"]:
+            self.logger.warning(f"  未获取到断路器状态，使用默认值0（off）")
+            payload["params"]["state"] = 0
+
         return payload
 
     def _push_device_data(self, device_id: str) -> bool:
-        """推送设备数据到网易IoT平台（通过MQTT broker）"""
+        """推送设备数据到网易IoT平台（通过MQTT broker，支持breaker）"""
         device_data = self.matched_devices[device_id]
         device_config = device_data["config"]
 
