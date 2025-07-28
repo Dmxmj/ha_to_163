@@ -22,11 +22,21 @@ PROPERTY_MAPPING = {
     "on": "state",
     "off": "state",
 
+    # 断路器属性
+    "voltage": "voltage",
+    "current": "current",
+    "power": "power",
+    "frequency": "frequency",
+    "state": "state",
+    "trip": "trip_state",  # 跳闸状态
+
     # 带后缀的扩展映射
     "temperature_p": "temp",
     "humidity_p": "hum",
     "battery_p": "batt",
-    "power_p": "power"
+    "power_p": "power",
+    "voltage_p": "voltage",
+    "current_p": "current"
 }
 
 
@@ -41,7 +51,7 @@ class HADiscovery(BaseDiscovery):
         self.sub_devices = [d for d in config.get("sub_devices", []) if d.get("enabled", True)]
 
     def load_ha_entities(self) -> bool:
-        """从HA API加载所有实体（支持sensor/switch等）"""
+        """从HA API加载所有实体（支持sensor/switch/breaker等）"""
         try:
             self.logger.info(f"从HA获取实体列表: {self.ha_url}/api/states")
             resp = None
@@ -86,7 +96,7 @@ class HADiscovery(BaseDiscovery):
             return False
 
     def match_entities_to_devices(self) -> Dict:
-        """将HA实体匹配到子设备（按设备类型过滤）"""
+        """将HA实体匹配到子设备（按设备类型过滤，新增breaker支持）"""
         matched_devices = {}
 
         # 初始化设备匹配容器
@@ -105,7 +115,7 @@ class HADiscovery(BaseDiscovery):
             entity_id = entity.get("entity_id", "")
             if "." not in entity_id:
                 continue  # 无效实体ID跳过
-            entity_type = entity_id.split('.')[0]  # 提取实体类型（sensor/switch等）
+            entity_type = entity_id.split('.')[0]  # 提取实体类型（sensor/switch/breaker等）
 
             # 提取实体属性
             attributes = entity.get("attributes", {})
@@ -118,13 +128,13 @@ class HADiscovery(BaseDiscovery):
             # 匹配到对应的子设备
             for device_id, device_data in matched_devices.items():
                 device = device_data["config"]
-                # 设备类型需与实体类型匹配（如switch设备匹配switch实体）
+                # 设备类型需与实体类型匹配（如breaker设备匹配breaker实体）
                 if device["type"] != entity_type:
                     continue
                 # 前缀匹配
                 prefix = device["ha_entity_prefix"]
                 if prefix in entity_id:
-                    # 提取实体属性部分（如"switch.living_room_power" → "power"）
+                    # 提取实体属性部分（如"breaker.main_voltage" → "voltage"）
                     entity_type_parts = entity_id.replace(prefix, "").strip('_').split('_')
                     entity_prop = '_'.join(entity_type_parts)
                     if not entity_prop:
