@@ -1,8 +1,8 @@
 {
     "name": "HA to 163 Gateway",
-    "version": "0.1.13",
+    "version": "0.1.0",
     "slug": "ha_to_163",
-    "description": "将Home Assistant传感器数据推送到网易IoT平台，支持传感器、插座、断路器等多设备类型自动发现",
+    "description": "将Home Assistant设备数据推送到网易IoT平台，支持sensor/switch/socket多类型设备",
     "arch": [
         "amd64",
         "armv7",
@@ -22,46 +22,33 @@
         "sub_devices": [
             {
                 "id": "sensor_001",
-                "type": "sensor",
                 "product_key": "",
                 "device_name": "",
                 "device_secret": "",
                 "ha_entity_prefix": "sensor.hz2_01_",
-                "supported_properties": [
-                    "temp",
-                    "hum",
-                    "batt"
-                ],
-                "enabled": true
+                "supported_properties": ["temp", "hum", "batt"],
+                "enabled": true,
+                "type": "sensor"
+            },
+            {
+                "id": "switch_001",
+                "product_key": "",
+                "device_name": "",
+                "device_secret": "",
+                "ha_entity_prefix": "switch.living_room_",
+                "supported_properties": ["state", "power"],
+                "enabled": true,
+                "type": "switch"
             },
             {
                 "id": "socket_001",
-                "type": "socket",
                 "product_key": "",
                 "device_name": "",
                 "device_secret": "",
-                "ha_entity_prefix": "switch.socket_01_",
-                "supported_properties": [
-                    "switch",
-                    "power",
-                    "current",
-                    "voltage"
-                ],
-                "enabled": true
-            },
-            {
-                "id": "breaker_001",
-                "type": "breaker",
-                "product_key": "",
-                "device_name": "",
-                "device_secret": "",
-                "ha_entity_prefix": "switch.breaker_01_",
-                "supported_properties": [
-                    "switch",
-                    "current",
-                    "leakage"
-                ],
-                "enabled": true
+                "ha_entity_prefix": "switch.socket_",
+                "supported_properties": ["state", "current", "power"],
+                "enabled": true,
+                "type": "socket"
             }
         ],
         "ha_discovery_interval": 3600,
@@ -86,15 +73,13 @@
         "sub_devices": [
             {
                 "id": "str",
-                "type": "match(sensor|socket|breaker)",
                 "product_key": "str",
                 "device_name": "str",
                 "device_secret": "str",
                 "ha_entity_prefix": "str",
-                "supported_properties": [
-                    "str"
-                ],
-                "enabled": "bool"
+                "supported_properties": ["str"],
+                "enabled": "bool",
+                "type": "match(sensor|switch|socket)"  // 限制设备类型
             }
         ],
         "ha_discovery_interval": "int",
@@ -104,7 +89,7 @@
         "retry_attempts": "int",
         "retry_delay": "int",
         "ntp_server": "str",
-        "wy_mqtt_broker": "str",
+        "wy_mqtt_broker": "str",  // MQTT broker配置
         "wy_mqtt_port_tcp": "int",
         "wy_mqtt_port_ssl": "int",
         "log_level": "match(info|debug|warning|error|critical)"
