@@ -21,9 +21,9 @@ class HAto163Gateway:
             "Content-Type": "application/json"
         }
 
-        # 设备与MQTT客户端
+        # 设备与MQTT客户端（broker配置从config读取）
         self.matched_devices = {}
-        self.mqtt_client = MQTTClient(self.config)
+        self.mqtt_client = MQTTClient(self.config)  # MQTT客户端使用broker配置
         self.running = True
 
         # 注册退出信号
@@ -37,7 +37,7 @@ class HAto163Gateway:
             self.mqtt_client.disconnect()
 
     def _wait_for_ha_ready(self) -> bool:
-        """等待Home Assistant就绪（不变）"""
+        """等待Home Assistant就绪"""
         timeout = self.config.get("entity_ready_timeout", 600)
         start_time = time.time()
         while time.time() - start_time < timeout:
@@ -58,15 +58,13 @@ class HAto163Gateway:
         return False
 
     def _discover_devices(self) -> bool:
-        """执行设备发现（基于HA实体）"""
+        """执行设备发现（支持多类型）"""
         discovery = HADiscovery(self.config, self.ha_headers)
         self.matched_devices = discovery.discover()
         return len(self.matched_devices) > 0
 
-    def _get_sensor_value(self, entity_id: str, property_name: str = None) -> float or bool or None:
-        """获取HA实体值（支持开关状态、数值型数据）
-        property_name用于区分开关类型属性（如switch）
-        """
+    def _get_entity_value(self, entity_id: str, device_type: str) -> float or int or None:
+        """获取HA实体值（适配多设备类型：数值/开关状态）"""
         try:
             # 等待实体就绪
             timeout = self.config.get("entity_ready_timeout", 600)
@@ -83,18 +81,19 @@ class HAto163Gateway:
                         time.sleep(5)
                         continue
 
-                    # 处理开关类型属性（switch）
-                    if property_name == "switch":
-                        return True if state == "on" else False
+                    # 处理开关/插座状态（on→1，off→0）
+                    if device_type in ("switch", "socket") and state in ("on", "off"):
+                        return 1 if state == "on" else 0
 
-                    # 处理数值型属性（温度、湿度、功率等）
+                    # 处理数值型（传感器/插座电流功率等）
                     import re
                     match = re.search(r'[-+]?\d*\.\d+|\d+', state)
                     if match:
                         return float(match.group())
-                    
-                    self.logger.warning(f"实体 {entity_id} 状态无法转换为数值: {state}")
+
+                    self.logger.warning(f"实体 {entity_id} 状态无法转换为有效值: {state}")
                     return None
+
                 time.sleep(5)
 
             self.logger.error(f"实体 {entity_id} 超时未就绪")
@@ -104,11 +103,11 @@ class HAto163Gateway:
             return None
 
     def _collect_device_data(self, device_id: str) -> dict:
-        """收集设备数据（适配插座、断路器）"""
+        """收集设备数据（按类型处理）"""
         device_data = self.matched_devices[device_id]
         device_config = device_data["config"]
-        sensors = device_data["sensors"]
-        device_type = device_config.get("type", "sensor")
+        device_type = device_config["type"]
+        entities = device_data["entities"]
 
         payload = {
             "id": int(time.time() * 1000),
@@ -116,29 +115,23 @@ class HAto163Gateway:
             "params": {}
         }
 
-        for prop, entity_id in sensors.items():
-            # 传入属性名，用于处理开关类型
-            value = self._get_sensor_value(entity_id, prop)
+        for prop, entity_id in entities.items():
+            value = self._get_entity_value(entity_id, device_type)
             if value is not None:
                 payload["params"][prop] = value
                 self.logger.info(f"  收集到 {prop} = {value}（实体: {entity_id}）")
             else:
                 self.logger.warning(f"  未获取到 {prop} 数据（实体: {entity_id}）")
 
-        # 电池默认值处理（仅传感器）
+        # 传感器电池默认值处理
         if device_type == "sensor" and "batt" in device_config["supported_properties"] and "batt" not in payload["params"]:
             self.logger.warning(f"  未获取到电池数据，使用默认值100")
             payload["params"]["batt"] = 100
 
-        # 开关默认值处理（插座、断路器）
-        if device_type in ("socket", "breaker") and "switch" in device_config["supported_properties"] and "switch" not in payload["params"]:
-            self.logger.warning(f"  未获取到开关数据，使用默认值False（关闭）")
-            payload["params"]["switch"] = False
-
         return payload
 
     def _push_device_data(self, device_id: str) -> bool:
-        """推送设备数据到网易平台（不变）"""
+        """推送设备数据到网易IoT平台（通过MQTT broker）"""
         device_data = self.matched_devices[device_id]
         device_config = device_data["config"]
 
@@ -148,11 +141,11 @@ class HAto163Gateway:
             self.logger.warning(f"设备 {device_id} 无有效数据，跳过推送")
             return False
 
-        # 推送数据（使用修正后的Topic格式）
+        # 推送数据（使用配置的broker信息）
         return self.mqtt_client.publish(device_config, payload)
 
     def start(self):
-        """启动服务（不变）"""
+        """启动服务"""
         self.logger.info("===== HA to 163 Gateway 启动 =====")
 
         # 启动延迟
@@ -164,7 +157,7 @@ class HAto163Gateway:
         if not self._wait_for_ha_ready():
             return
 
-        # 连接MQTT
+        # 连接MQTT broker
         if not self.mqtt_client.connect():
             return
 
