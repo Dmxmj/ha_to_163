@@ -7,7 +7,7 @@
       "name": "HA to 163 Gateway",
       "slug": "ha_to_163",
       "description": "将Home Assistant传感器数据推送到网易IoT平台，支持多设备类型自动发现",
-      "version": "0.1.0",
+      "version": "0.1.15",
       "url": "https://github.com/Dmxmj/ha-addon-163-gateway/tree/main/ha_to_163",
       "arch": ["amd64", "armv7", "aarch64", "i386"],
       "startup": "application",
