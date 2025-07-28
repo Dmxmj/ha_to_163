@@ -1,89 +1,133 @@
 {
-  "name": "HA to 163 Gateway",
-  "version": "0.1.2",
-  "slug": "ha_to_163",
-  "description": "支持传感器、开关、插座、断路器数据推送到网易IoT平台",
-  "arch": ["amd64", "armv7", "aarch64", "i386"],
-  "url": "https://github.com/Dmxmj/ha-addon-163-gateway/tree/main",
-  "startup": "application",
-  "boot": "auto",
-  "options": {
-    "ha_url": "http://homeassistant:8123",
-    "ha_token": "",
-    "use_ssl": false,
-    "gateway_product_key": "",
-    "gateway_device_name": "",
-    "gateway_device_secret": "",
-    "sub_devices": [
-      {
-        "id": "sensor_001",
-        "product_key": "",
-        "device_name": "",
-        "device_secret": "",
-        "ha_entity_prefix": "sensor.xiaomi_",
-        "device_type": "sensor",
-        "supported_properties": ["temp", "hum", "batt"],
-        "enabled": true
-      },
-      {
-        "id": "switch_001",
-        "product_key": "",
-        "device_name": "",
-        "device_secret": "",
-        "ha_entity_prefix": "switch.iot_cn_942988692_",
-        "device_type": "switch",
-        "supported_properties": ["state"],
-        "enabled": true
-      },
-      {
-        "id": "socket_001",
-        "product_key": "",
-        "device_name": "",
-        "device_secret": "",
-        "ha_entity_prefix": "switch.xiaomi_socket_",
-        "device_type": "socket",
-        "supported_properties": ["state", "power", "current"],
-        "enabled": true
-      },
-      {
-        "id": "breaker_001",
-        "product_key": "",
-        "device_name": "",
-        "device_secret": "",
-        "ha_entity_prefix": "sensor.breaker_",
-        "device_type": "breaker",
-        "supported_properties": ["state", "voltage", "current", "power", "leakage"],
-        "enabled": true
-      }
+    "name": "HA to 163 Gateway",
+    "version": "0.1.7",
+    "slug": "ha_to_163",
+    "description": "将Home Assistant设备数据（传感器、开关、插座、断路器）推送到网易IoT平台，支持多设备类型自动发现",
+    "arch": [
+        "amd64",
+        "armv7",
+        "aarch64",
+        "i386"
     ],
-    "ha_discovery_interval": 3600,
-    "wy_push_interval": 30,
-    "log_level": "info"
-  },
-  "schema": {
-    "ha_url": "str",
-    "ha_token": "str",
-    "use_ssl": "bool",
-    "gateway_product_key": "str",
-    "gateway_device_name": "str",
-    "gateway_device_secret": "str",
-    "sub_devices": [
-      {
-        "id": "str",
-        "product_key": "str",
-        "device_name": "str",
-        "device_secret": "str",
-        "ha_entity_prefix": "str",
-        "device_type": "match(sensor|switch|socket|breaker)",
-        "supported_properties": ["str"],
-        "enabled": "bool"
-      }
-    ],
-    "ha_discovery_interval": "int",
-    "wy_push_interval": "int",
-    "log_level": "match(info|debug|warning|error|critical)"
-  },
-  "ingress": false,
-  "host_network": false,
-  "map": ["config"]
+    "url": "https://github.com/Dmxmj/ha-addon-163-gateway/tree/main",
+    "startup": "application",
+    "boot": "auto",
+    "options": {
+        "ha_url": "http://homeassistant:8123",
+        "ha_token": "",
+        "use_ssl": false,
+        "gateway_product_key": "",
+        "gateway_device_name": "",
+        "gateway_device_secret": "",
+        "sub_devices": [
+            {
+                "id": "sensor_001",
+                "product_key": "",
+                "device_name": "",
+                "device_secret": "",
+                "ha_entity_prefix": "sensor.hz2_01_",
+                "device_type": "sensor",
+                "supported_properties": [
+                    "temp",
+                    "hum",
+                    "batt"
+                ],
+                "enabled": true
+            },
+            {
+                "id": "switch_001",
+                "product_key": "",
+                "device_name": "",
+                "device_secret": "",
+                "ha_entity_prefix": "switch.iot_cn_942988692_",
+                "device_type": "switch",
+                "supported_properties": [
+                    "state"
+                ],
+                "enabled": true
+            },
+            {
+                "id": "socket_001",
+                "product_key": "",
+                "device_name": "",
+                "device_secret": "",
+                "ha_entity_prefix": "switch.xiaomi_socket_",
+                "device_type": "socket",
+                "supported_properties": [
+                    "state",
+                    "power",
+                    "current"
+                ],
+                "enabled": true
+            },
+            {
+                "id": "breaker_001",
+                "product_key": "",
+                "device_name": "",
+                "device_secret": "",
+                "ha_entity_prefix": "sensor.breaker_",
+                "device_type": "breaker",
+                "supported_properties": [
+                    "state",
+                    "voltage",
+                    "current",
+                    "power",
+                    "leakage"
+                ],
+                "enabled": true
+            }
+        ],
+        "ha_discovery_interval": 3600,
+        "wy_push_interval": 60,
+        "startup_delay": 120,
+        "entity_ready_timeout": 600,
+        "retry_attempts": 5,
+        "retry_delay": 3,
+        "ntp_server": "ntp.n.netease.com",
+        "wy_mqtt_broker": "device.iot.163.com",
+        "wy_mqtt_port_tcp": 1883,
+        "wy_mqtt_port_ssl": 8883,
+        "log_level": "info"
+    },
+    "schema": {
+        "ha_url": "str",
+        "ha_token": "str",
+        "use_ssl": "bool",
+        "gateway_product_key": "str",
+        "gateway_device_name": "str",
+        "gateway_device_secret": "str",
+        "sub_devices": [
+            {
+                "id": "str",
+                "product_key": "str",
+                "device_name": "str",
+                "device_secret": "str",
+                "ha_entity_prefix": "str",
+                "device_type": "match(sensor|switch|socket|breaker)",
+                "supported_properties": [
+                    "str"
+                ],
+                "enabled": "bool"
+            }
+        ],
+        "ha_discovery_interval": "int",
+        "wy_push_interval": "int",
+        "startup_delay": "int",
+        "entity_ready_timeout": "int",
+        "retry_attempts": "int",
+        "retry_delay": "int",
+        "ntp_server": "str",
+        "wy_mqtt_broker": "str",
+        "wy_mqtt_port_tcp": "int",
+        "wy_mqtt_port_ssl": "int",
+        "log_level": "match(info|debug|warning|error|critical)"
+    },
+    "ingress": false,
+    "host_network": false,
+    "ports": {},
+    "map": [
+        "config",
+        "ssl",
+        "share"
+    ]
 }
