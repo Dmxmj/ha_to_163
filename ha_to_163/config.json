@@ -79,7 +79,7 @@
                 "ha_entity_prefix": "str",
                 "supported_properties": ["str"],
                 "enabled": "bool",
-                "type": "match(sensor|switch|socket)"  // 限制设备类型
+                "type": "match(sensor|switch|socket)"
             }
         ],
         "ha_discovery_interval": "int",
@@ -89,7 +89,7 @@
         "retry_attempts": "int",
         "retry_delay": "int",
         "ntp_server": "str",
-        "wy_mqtt_broker": "str",  // MQTT broker配置
+        "wy_mqtt_broker": "str",
         "wy_mqtt_port_tcp": "int",
         "wy_mqtt_port_ssl": "int",
         "log_level": "match(info|debug|warning|error|critical)"
