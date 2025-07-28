@@ -10,6 +10,9 @@
     "options": {
         "ha_url": "http://homeassistant:8123",
         "ha_token": "",
+        "gateway_product_key": "",
+        "gateway_device_name": "",
+        "gateway_device_secret": "",
         "use_ssl": false,
         "sub_devices": [
             {
