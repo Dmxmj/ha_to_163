@@ -169,4 +169,3 @@ class MQTTClient:
             self.client.disconnect()
             self.connected = False
             self.logger.info("MQTT连接已断开")
-    
