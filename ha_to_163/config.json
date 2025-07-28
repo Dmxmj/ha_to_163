@@ -1,9 +1,14 @@
 {
     "name": "HA to 163 Gateway",
-    "version": "0.1.10",
+    "version": "0.1.11",
     "slug": "ha_to_163",
     "description": "推送传感器、开关、插座、断路器数据到网易IoT平台",
-    "arch": ["amd64", "armv7", "aarch64", "i386"],
+    "arch": [
+        "amd64",
+        "armv7",
+        "aarch64",
+        "i386"
+    ],
     "url": "https://github.com/Dmxmj/ha-addon-163-gateway/tree/main",
     "startup": "application",
     "boot": "auto",
@@ -22,7 +27,25 @@
                 "device_secret": "",
                 "ha_entity_prefix": "sensor.hz2_01_",
                 "device_type": "sensor",
-                "supported_properties": ["temp", "hum", "batt"],
+                "supported_properties": [
+                    "temp",
+                    "hum",
+                    "batt"
+                ],
+                "enabled": true
+            },
+            {
+                "id": "sensor_002",
+                "product_key": "",
+                "device_name": "",
+                "device_secret": "",
+                "ha_entity_prefix": "sensor.hz2_02_",
+                "device_type": "sensor",
+                "supported_properties": [
+                    "temp",
+                    "hum",
+                    "batt"
+                ],
                 "enabled": true
             },
             {
@@ -32,7 +55,9 @@
                 "device_secret": "",
                 "ha_entity_prefix": "switch.iot_cn_942988692_",
                 "device_type": "switch",
-                "supported_properties": ["state"],
+                "supported_properties": [
+                    "state"
+                ],
                 "enabled": true
             },
             {
@@ -42,7 +67,10 @@
                 "device_secret": "",
                 "ha_entity_prefix": "switch.xiaomi_socket_",
                 "device_type": "socket",
-                "supported_properties": ["state", "power"],
+                "supported_properties": [
+                    "state",
+                    "power"
+                ],
                 "enabled": true
             },
             {
@@ -52,12 +80,15 @@
                 "device_secret": "",
                 "ha_entity_prefix": "sensor.breaker_",
                 "device_type": "breaker",
-                "supported_properties": ["voltage", "current"],
+                "supported_properties": [
+                    "voltage",
+                    "current"
+                ],
                 "enabled": true
             }
         ],
         "ha_discovery_interval": 3600,
-        "wy_push_interval": 60,
+        "wy_push_interval": 30,
         "startup_delay": 120,
         "entity_ready_timeout": 600,
         "retry_attempts": 5,
@@ -83,7 +114,9 @@
                 "device_secret": "str",
                 "ha_entity_prefix": "str",
                 "device_type": "match(sensor|switch|socket|breaker)",
-                "supported_properties": ["str"],
+                "supported_properties": [
+                    "str"
+                ],
                 "enabled": "bool"
             }
         ],
@@ -102,5 +135,9 @@
     "ingress": false,
     "host_network": false,
     "ports": {},
-    "map": ["config", "ssl", "share"]
+    "map": [
+        "config",
+        "ssl",
+        "share"
+    ]
 }
