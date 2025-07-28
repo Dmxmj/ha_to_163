@@ -1,196 +1,188 @@
-import logging
-import time
-import json
-import signal
 import requests
-from utils.config_loader import ConfigLoader
-from utils.mqtt_client import MQTTClient
-from device_discovery.ha_discovery import HADiscovery
+import paho.mqtt.client as mqtt
+import json
+import time
+import hmac
+import hashlib
+from typing import Dict, List, Any
 
-class HAto163Gateway:
-    def __init__(self):
-        # 加载配置
-        self.config_loader = ConfigLoader()
-        self.config = self.config_loader.config
-        self.logger = logging.getLogger("ha_to_163")
-        
-        # 初始化HA请求头
-        self.ha_headers = {
-            "Authorization": f"Bearer {self.config['ha_token']}",
-            "Content-Type": "application/json"
-        }
-        
-        # 设备与MQTT客户端
-        self.matched_devices = {}
-        self.mqtt_client = MQTTClient(self.config)
-        self.running = True
-        
-        # 注册退出信号
-        signal.signal(signal.SIGINT, self._stop)
-        signal.signal(signal.SIGTERM, self._stop)
-    
-    def _stop(self, signum, frame):
-        self.logger.info("收到停止信号，正在退出...")
-        self.running = False
-        if hasattr(self, 'mqtt_client') and self.mqtt_client:
-            self.mqtt_client.disconnect()
-    
-    def _wait_for_ha_ready(self) -> bool:
-        """等待Home Assistant就绪"""
-        timeout = self.config.get("entity_ready_timeout", 600)
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            try:
-                resp = requests.get(
-                    f"{self.config['ha_url']}/api/",
-                    headers=self.ha_headers,
-                    timeout=10
-                )
-                if resp.status_code == 200:
-                    self.logger.info("Home Assistant已就绪")
-                    return True
-            except Exception as e:
-                self.logger.warning(f"HA未就绪: {e}")
-            time.sleep(10)
-        
-        self.logger.error(f"HA超时未就绪（{timeout}秒）")
-        return False
-    
-    def _discover_devices(self) -> bool:
-        """执行设备发现（基于HA实体）"""
-        discovery = HADiscovery(self.config, self.ha_headers)
-        self.matched_devices = discovery.discover()
-        return len(self.matched_devices) > 0
-    
-    def _get_sensor_value(self, entity_id: str) -> float:
-        """获取HA实体值（支持带单位的状态提取）"""
+class ConfigLoader:
+    """加载Add-on配置（从/data/options.json）"""
+    def load(self) -> Dict[str, Any]:
         try:
-            # 等待实体就绪
-            timeout = self.config.get("entity_ready_timeout", 600)
-            start_time = time.time()
-            while time.time() - start_time < timeout:
-                resp = requests.get(
-                    f"{self.config['ha_url']}/api/states/{entity_id}",
-                    headers=self.ha_headers,
-                    timeout=5
-                )
-                if resp.status_code == 200:
-                    state = resp.json().get("state")
-                    if state not in ("unknown", "unavailable", ""):
-                        # 提取数值（支持带单位，如"25.5°C"）
-                        import re
-                        match = re.search(r'[-+]?\d*\.\d+|\d+', state)
-                        if match:
-                            return float(match.group())
-                        self.logger.warning(f"实体 {entity_id} 状态无法转换为数值: {state}")
-                        return None
-                time.sleep(5)
-            
-            self.logger.error(f"实体 {entity_id} 超时未就绪")
-            return None
+            with open("/data/options.json", "r") as f:
+                return json.load(f)
         except Exception as e:
-            self.logger.error(f"获取实体 {entity_id} 失败: {e}")
-            return None
-    
-    def _collect_device_data(self, device_id: str) -> dict:
-        """收集设备数据"""
-        device_data = self.matched_devices[device_id]
-        device_config = device_data["config"]
-        sensors = device_data["sensors"]
-        
-        payload = {
-            "id": int(time.time() * 1000),
-            "version": "1.0",
-            "params": {}
+            print(f"配置加载失败: {str(e)}")
+            raise
+
+class HATo163Gateway:
+    def __init__(self):
+        self.config = ConfigLoader().load()
+        self.ha_entities: Dict[str, Dict] = {}  # 按设备ID存储实体
+        self.device_type_handlers = {
+            "sensor": self._handle_sensor,
+            "switch": self._handle_switch,
+            "socket": self._handle_socket,
+            "breaker": self._handle_breaker
         }
-        
-        for prop, entity_id in sensors.items():
-            value = self._get_sensor_value(entity_id)
-            if value is not None:
-                payload["params"][prop] = value
-                self.logger.info(f"  收集到 {prop} = {value}（实体: {entity_id}）")
-            else:
-                self.logger.warning(f"  未获取到 {prop} 数据（实体: {entity_id}）")
-        
-        # 电池默认值处理
-        if "batt" in device_config["supported_properties"] and "batt" not in payload["params"]:
-            self.logger.warning(f"  未获取到电池数据，使用默认值100")
-            payload["params"]["batt"] = 100
-        
-        return payload
-    
-    def _push_device_data(self, device_id: str) -> bool:
-        """推送设备数据到网易平台"""
-        device_data = self.matched_devices[device_id]
-        device_config = device_data["config"]
-        
-        # 收集数据
-        payload = self._collect_device_data(device_id)
-        if not payload["params"]:
-            self.logger.warning(f"设备 {device_id} 无有效数据，跳过推送")
-            return False
-        
-        # 推送数据（使用修正后的Topic格式）
-        return self.mqtt_client.publish(device_config, payload)
-    
-    def start(self):
-        """启动服务"""
-        self.logger.info("===== HA to 163 Gateway 启动 =====")
-        
-        # 启动延迟
-        startup_delay = self.config.get("startup_delay", 120)
-        self.logger.info(f"启动延迟 {startup_delay} 秒...")
-        time.sleep(startup_delay)
-        
-        # 等待HA就绪
-        if not self._wait_for_ha_ready():
+
+    def discover_ha_entities(self) -> None:
+        """发现HA中符合前缀的实体（支持所有设备类型）"""
+        headers = {"Authorization": f"Bearer {self.config['ha_token']}"}
+        try:
+            response = requests.get(
+                f"{self.config['ha_url']}/api/states",
+                headers=headers,
+                verify=self.config['use_ssl'],
+                timeout=10
+            )
+            response.raise_for_status()
+            states = response.json()
+        except Exception as e:
+            print(f"HA实体发现失败: {str(e)}")
             return
-        
-        # 连接MQTT
-        if not self.mqtt_client.connect():
-            return
-        
-        # 初始设备发现
-        if not self._discover_devices():
-            self.logger.error("未匹配到任何设备，服务启动失败")
-            return
-        
-        # 主循环
-        self._run_loop()
-    
-    def _run_loop(self):
-        """主循环（定时发现与推送）"""
-        push_interval = self.config.get("wy_push_interval", 60)
-        discovery_interval = self.config.get("ha_discovery_interval", 3600)
-        last_discovery = time.time()
-        last_push = time.time()
-        
-        while self.running:
-            now = time.time()
+
+        # 按设备配置匹配实体
+        for device in self.config['sub_devices']:
+            if not device['enabled']:
+                continue
             
-            # 定时重新发现设备
-            if now - last_discovery >= discovery_interval:
-                self.logger.info("执行定时设备发现...")
-                self._discover_devices()
-                last_discovery = now
+            device_id = device['id']
+            prefix = device['ha_entity_prefix']
+            matched_entities = [
+                state for state in states
+                if state['entity_id'].startswith(prefix)
+            ]
             
-            # 定时推送数据
-            if now - last_push >= push_interval:
-                self.logger.info("开始数据推送...")
-                for device_id in self.matched_devices:
-                    self.logger.info(f"\n推送设备 {device_id} 数据")
-                    self._push_device_data(device_id)
-                last_push = now
+            self.ha_entities[device_id] = {
+                "device_config": device,
+                "entities": matched_entities
+            }
+            print(f"设备 {device_id} 发现 {len(matched_entities)} 个实体")
+
+    def push_to_163_platform(self) -> None:
+        """根据设备类型推送数据到网易平台"""
+        for device_id, data in self.ha_entities.items():
+            device_config = data['device_config']
+            device_type = device_config['device_type']
             
-            time.sleep(1)
+            # 调用对应设备类型的处理器
+            handler = self.device_type_handlers.get(device_type)
+            if not handler:
+                print(f"不支持的设备类型: {device_type}")
+                continue
+            
+            handler(device_config, data['entities'])
+
+    def _handle_sensor(self, device_config: Dict, entities: List[Dict]) -> None:
+        """处理传感器设备（温度、湿度等）"""
+        self._publish_common(device_config, entities, {
+            "temp": lambda v: float(v),    # 温度→浮点型
+            "hum": lambda v: float(v),     # 湿度→浮点型
+            "batt": lambda v: int(v[:-1])  # 电池百分比（如"85%"→85）
+        })
+
+    def _handle_switch(self, device_config: Dict, entities: List[Dict]) -> None:
+        """处理开关设备（仅状态）"""
+        self._publish_common(device_config, entities, {
+            "state": lambda v: 1 if v == "on" else 0  # 开关状态→1/0
+        })
+
+    def _handle_socket(self, device_config: Dict, entities: List[Dict]) -> None:
+        """处理智能插座（状态、功率、电流）"""
+        self._publish_common(device_config, entities, {
+            "state": lambda v: 1 if v == "on" else 0,  # 开关状态→1/0
+            "power": lambda v: float(v),               # 功率→浮点型（单位W）
+            "current": lambda v: float(v)              # 电流→浮点型（单位A）
+        })
+
+    def _handle_breaker(self, device_config: Dict, entities: List[Dict]) -> None:
+        """处理智能断路器（状态、电压、电流、功率、漏电）"""
+        self._publish_common(device_config, entities, {
+            "state": lambda v: 1 if v == "on" else 0,   # 开关状态→1/0
+            "voltage": lambda v: float(v),              # 电压→浮点型（单位V）
+            "current": lambda v: float(v),              # 电流→浮点型（单位A）
+            "power": lambda v: float(v),                # 功率→浮点型（单位W）
+            "leakage": lambda v: float(v)               # 漏电流→浮点型（单位mA）
+        })
+
+    def _publish_common(self, device_config: Dict, entities: List[Dict], 
+                       converters: Dict[str, Any]) -> None:
+        """通用发布逻辑（连接MQTT并推送数据）"""
+        # 构建MQTT客户端
+        client = mqtt.Client(client_id=device_config['device_name'])
+        client.username_pw_set(
+            username=device_config['device_name'],
+            password=self._generate_163_password(device_config['device_secret'])
+        )
+        
+        try:
+            client.connect(
+                self.config.get('wy_mqtt_broker', 'device.iot.163.com'),
+                self.config.get('wy_mqtt_port_tcp', 1883)
+            )
+            
+            # 处理每个实体
+            prefix = device_config['ha_entity_prefix']
+            for entity in entities:
+                entity_id = entity['entity_id']
+                # 提取属性名（如"switch.xiaomi_socket_power"→"power"）
+                prop_name = entity_id.replace(prefix, '')
+                
+                # 只处理配置中声明的属性
+                if prop_name not in device_config['supported_properties']:
+                    continue
+                
+                # 转换属性值
+                raw_value = entity['state']
+                converter = converters.get(prop_name)
+                if not converter:
+                    print(f"未找到{prop_name}的转换器，跳过")
+                    continue
+                
+                try:
+                    converted_value = converter(raw_value)
+                except Exception as e:
+                    print(f"转换{entity_id}值失败: {str(e)}")
+                    continue
+                
+                # 发布到网易平台
+                topic = f"/{device_config['product_key']}/{device_config['device_name']}/property/post"
+                payload = json.dumps({
+                    "id": int(time.time()),
+                    "version": "1.0",
+                    "params": {prop_name: converted_value}
+                })
+                client.publish(topic, payload)
+                print(f"推送 {device_config['id']} {entity_id} → {payload}")
+                
+        except Exception as e:
+            print(f"MQTT推送失败: {str(e)}")
+        finally:
+            client.disconnect()
+
+    def _generate_163_password(self, secret: str) -> str:
+        """生成网易IoT平台MQTT密码（HMAC签名）"""
+        timestamp = int(time.time())
+        counter = timestamp // 300  # 每5分钟更新一次签名
+        hmac_obj = hmac.new(secret.encode(), str(counter).encode(), hashlib.sha256)
+        token = hmac_obj.digest()[:10].hex().upper()
+        return f"v1:{token}"
+
+    def run(self) -> None:
+        """主循环"""
+        print("HA to 163 Gateway 启动成功")
+        while True:
+            self.discover_ha_entities()
+            self.push_to_163_platform()
+            time.sleep(self.config['wy_push_interval'])
 
 if __name__ == "__main__":
-    # 配置日志
-    import os
-    logging.basicConfig(
-        level=os.getenv("LOG_LEVEL", "INFO").upper(),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    gateway = HAto163Gateway()
-    gateway.start()
+    try:
+        gateway = HATo163Gateway()
+        gateway.run()
+    except Exception as e:
+        print(f"程序异常退出: {str(e)}")
+        exit(1)
     
