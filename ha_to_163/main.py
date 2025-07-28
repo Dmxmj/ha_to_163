@@ -122,8 +122,12 @@ class HATo163Gateway:
     def _publish_common(self, device_config: Dict, entities: List[Dict], 
                        converters: Dict[str, Any]) -> None:
         """通用发布逻辑（连接MQTT并推送数据）"""
-        # 构建MQTT客户端，使用最新的API版本
-        client = mqtt.Client(client_id=device_config['device_name'], protocol=mqtt.MQTTv311)
+        # 构建MQTT客户端，显式指定回调API版本2（最新版本）
+        client = mqtt.Client(
+            client_id=device_config['device_name'],
+            protocol=mqtt.MQTTv311,
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2  # 关键修复：指定API版本
+        )
         client.username_pw_set(
             username=device_config['device_name'],
             password=self._generate_163_password(device_config['device_secret'])
