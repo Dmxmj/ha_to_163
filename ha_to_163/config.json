@@ -1,19 +1,19 @@
 {
     "name": "HA to 163 Gateway",
-    "version": "0.1.8",
+    "version": "0.1.10",
     "slug": "ha_to_163",
     "description": "推送传感器、开关、插座、断路器数据到网易IoT平台",
     "arch": ["amd64", "armv7", "aarch64", "i386"],
-    "url": "https://gitcode.com/waxgourd/ha-git-addons",
+    "url": "https://github.com/Dmxmj/ha-addon-163-gateway/tree/main",
     "startup": "application",
     "boot": "auto",
     "options": {
         "ha_url": "http://homeassistant:8123",
         "ha_token": "",
+        "use_ssl": false,
         "gateway_product_key": "",
         "gateway_device_name": "",
         "gateway_device_secret": "",
-        "use_ssl": false,
         "sub_devices": [
             {
                 "id": "sensor_001",
@@ -56,13 +56,25 @@
                 "enabled": true
             }
         ],
-        "wy_push_interval": 30,
+        "ha_discovery_interval": 3600,
+        "wy_push_interval": 60,
+        "startup_delay": 120,
+        "entity_ready_timeout": 600,
+        "retry_attempts": 5,
+        "retry_delay": 3,
+        "ntp_server": "ntp.n.netease.com",
+        "wy_mqtt_broker": "device.iot.163.com",
+        "wy_mqtt_port_tcp": 1883,
+        "wy_mqtt_port_ssl": 8883,
         "log_level": "info"
     },
     "schema": {
         "ha_url": "str",
         "ha_token": "str",
         "use_ssl": "bool",
+        "gateway_product_key": "str",
+        "gateway_device_name": "str",
+        "gateway_device_secret": "str",
         "sub_devices": [
             {
                 "id": "str",
@@ -75,10 +87,20 @@
                 "enabled": "bool"
             }
         ],
+        "ha_discovery_interval": "int",
         "wy_push_interval": "int",
+        "startup_delay": "int",
+        "entity_ready_timeout": "int",
+        "retry_attempts": "int",
+        "retry_delay": "int",
+        "ntp_server": "str",
+        "wy_mqtt_broker": "str",
+        "wy_mqtt_port_tcp": "int",
+        "wy_mqtt_port_ssl": "int",
         "log_level": "match(info|debug|warning|error|critical)"
     },
     "ingress": false,
     "host_network": false,
-    "map": ["config"]
+    "ports": {},
+    "map": ["config", "ssl", "share"]
 }
