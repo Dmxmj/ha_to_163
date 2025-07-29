@@ -5,7 +5,7 @@ import time
 from typing import Dict
 from .base_discovery import BaseDiscovery
 
-# 增强映射：覆盖更多power和energy的实体命名变体
+# 严格区分映射关系，避免冲突
 PROPERTY_MAPPING = {
     # 基础属性（不变）
     "temperature": "temp",
@@ -18,37 +18,24 @@ PROPERTY_MAPPING = {
     "on": "state",
     "off": "state",
 
-    # 电气参数（重点扩展power和energy的变体）
-    # 电流：electric_current → current（不变）
+    # 关键修正：明确区分electric_power和power_consumption的映射
+    # 1. 电功率：仅electric_power/power等指向active_power
+    "electric_power": "active_power",  # 核心映射：electric_power→active_power
+    "power": "active_power",           # 补充：直接命名为power的实体→active_power
+    "active_power": "active_power",    # 直接匹配目标字段
+    "elec_power": "active_power",      # 缩写变体
+    
+    # 2. 耗电量：仅power_consumption/energy等指向energy
+    "power_consumption": "energy",     # 核心映射：power_consumption→energy
+    "energy": "energy",                # 直接命名为energy的实体
+    "kwh": "energy",                   # 单位变体
+    "electricity_used": "energy",      # 用电总量变体
+    
+    # 其他电气参数（保持正确映射）
     "current": "current",
     "electric_current": "current",
-    "curr": "current",
-    "electric_curr": "current",
-    
-    # 电功率：electric_power → active_power（扩展更多变体）
-    "power": "active_power",           # 直接用power命名的实体
-    "electric_power": "active_power",  # 标准命名
-    "active_power": "active_power",    # 直接用目标字段命名
-    "elec_power": "active_power",      # 缩写变体
-    "electricity_power": "active_power", # 全称变体
-    
-    # 耗电量：power_consumption → energy（扩展更多变体）
-    "energy": "energy",                # 直接用energy命名
-    "power_consumption": "energy",     # 标准命名
-    "kwh": "energy",                   # 千瓦时单位
-    "consumption": "energy",           # 简化命名
-    "electricity_used": "energy",      # 用电总量
-    "total_energy": "energy",          # 总能耗
-    
-    # 电压：voltage → voltage（不变）
     "voltage": "voltage",
-    "vol": "voltage",
-    "electric_vol": "voltage",
-    
-    # 频率：frequency → frequency（不变）
-    "frequency": "frequency",
-    "freq": "frequency",
-    "electric_freq": "frequency"
+    "frequency": "frequency"
 }
 
 
@@ -62,12 +49,12 @@ class HADiscovery(BaseDiscovery):
         self.electric_device_types = {"switch", "socket", "breaker"}
 
     def load_ha_entities(self) -> bool:
-        # 保持原有逻辑不变
+        # 保持原有逻辑
         try:
             self.logger.info(f"从HA获取实体列表: {self.ha_url}/api/states")
             resp = None
-            retry_attempts = self.config.get("retry_attempts", 5)
-            retry_delay = self.config.get("retry_delay", 3)
+            retry_attempts = 5
+            retry_delay = 3
 
             for attempt in range(retry_attempts):
                 try:
@@ -105,53 +92,54 @@ class HADiscovery(BaseDiscovery):
                 "entities": {},
                 "last_data": None
             }
-            self.logger.info(f"开始匹配{device_type}设备: {device_id}（核心前缀: {device['ha_entity_prefix']}）")
+            self.logger.info(f"开始匹配{device_type}设备: {device_id}（前缀: {device['ha_entity_prefix']}）")
 
         for entity in self.entities:
             entity_id = entity.get("entity_id", "")
             if "." not in entity_id:
                 continue
             entity_type = entity_id.split('.')[0]
-            entity_core = entity_id.split('.', 1)[1]
-            attributes = entity.get("attributes", {})
-            friendly_name = attributes.get("friendly_name", "").lower()
+            entity_core = entity_id.split('.', 1)[1]  # 如"iot_cn_942988692_jdls1_electric_power_p3"
+            friendly_name = entity.get("attributes", {}).get("friendly_name", "").lower()
 
-            # 新增调试日志：打印所有含前缀的实体，方便排查
-            for device in self.sub_devices:
-                if device["ha_entity_prefix"] in entity_core:
-                    self.logger.debug(f"发现含目标前缀的实体: {entity_id}（名称: {friendly_name}）")
+            # 重点日志：追踪electric_power和power_consumption相关实体
+            if "electric_power" in entity_core or "power_consumption" in entity_core:
+                self.logger.debug(f"检测到目标实体: {entity_id}（名称: {friendly_name}）")
 
             for device_id, device_data in matched_devices.items():
                 device = device_data["config"]
-                device_type = device["type"]
                 core_prefix = device["ha_entity_prefix"]
-
                 if core_prefix not in entity_core:
                     continue
 
-                if device_type in self.electric_device_types:
-                    if entity_type not in ("switch", "sensor"):
-                        continue
-                else:
-                    if entity_type != device_type:
-                        continue
+                # 电气设备匹配规则
+                if device["type"] in self.electric_device_types and entity_type not in ("switch", "sensor"):
+                    continue
+                if device["type"] not in self.electric_device_types and entity_type != device["type"]:
+                    continue
 
-                # 优化后缀清洗：处理更多变体（如_p3_4、_sensor等）
-                cleaned_suffix = re.sub(r'_p\d+(_\d+)?$', '', entity_core)  # 去除_p3_4
-                cleaned_suffix = re.sub(r'_sensor$', '', cleaned_suffix)    # 去除_sensor后缀
-                cleaned_suffix = re.sub(r'_state$', '', cleaned_suffix)     # 去除_state后缀
-                cleaned_suffix = cleaned_suffix.replace(core_prefix, "").strip('_')
-                self.logger.debug(f"实体处理: 原始={entity_core} → 清洗后={cleaned_suffix}")
+                # 增强后缀清洗：确保electric_power_p3→electric_power，power_consumption_p2→power_consumption
+                cleaned_suffix = re.sub(r'_p\d+(_\d+)?$', '', entity_core)  # 去除_p3/_p2_1等
+                cleaned_suffix = cleaned_suffix.replace(core_prefix, "").strip('_')  # 去除前缀
+                self.logger.debug(f"实体清洗: 原始={entity_core} → 清洗后={cleaned_suffix}")
 
-                # 增强匹配逻辑：优先全词匹配，再模糊匹配
+                # 匹配逻辑：优先核心映射（electric_power和power_consumption）
                 property_name = None
 
-                # 1. 完整匹配（清洗后的后缀）
-                if cleaned_suffix in PROPERTY_MAPPING:
+                # 1. 优先匹配核心关键词（防止被其他规则覆盖）
+                if "electric_power" in cleaned_suffix:
+                    property_name = "active_power"
+                    self.logger.debug(f"核心匹配: electric_power → active_power（实体: {entity_id}）")
+                elif "power_consumption" in cleaned_suffix:
+                    property_name = "energy"
+                    self.logger.debug(f"核心匹配: power_consumption → energy（实体: {entity_id}）")
+
+                # 2. 常规完整匹配
+                if not property_name and cleaned_suffix in PROPERTY_MAPPING:
                     property_name = PROPERTY_MAPPING[cleaned_suffix]
                     self.logger.debug(f"完整匹配: {cleaned_suffix} → {property_name}")
 
-                # 2. 拆分匹配（支持中间关键词，如"power_total"拆出"power"）
+                # 3. 拆分匹配（处理多词组合）
                 if not property_name:
                     for part in cleaned_suffix.split('_'):
                         if part in PROPERTY_MAPPING:
@@ -159,21 +147,14 @@ class HADiscovery(BaseDiscovery):
                             self.logger.debug(f"拆分匹配: {part} → {property_name}")
                             break
 
-                # 3. 模糊匹配（关键词包含在后缀中，如"powerusage"包含"power"）
+                # 4. 名称匹配（友好名称）
                 if not property_name:
-                    for key, prop in PROPERTY_MAPPING.items():
-                        if key in cleaned_suffix:
-                            property_name = prop
-                            self.logger.debug(f"模糊匹配: {key} in {cleaned_suffix} → {property_name}")
-                            break
-
-                # 4. 名称匹配（友好名称中包含关键词）
-                if not property_name:
-                    for key, prop in PROPERTY_MAPPING.items():
-                        if key in friendly_name:
-                            property_name = prop
-                            self.logger.debug(f"名称匹配: {key} in {friendly_name} → {property_name}")
-                            break
+                    if "electric_power" in friendly_name:
+                        property_name = "active_power"
+                        self.logger.debug(f"名称匹配: electric_power → active_power（名称: {friendly_name}）")
+                    elif "power_consumption" in friendly_name:
+                        property_name = "energy"
+                        self.logger.debug(f"名称匹配: power_consumption → energy（名称: {friendly_name}）")
 
                 # 验证并添加匹配
                 if property_name and property_name in device["supported_properties"]:
@@ -182,13 +163,15 @@ class HADiscovery(BaseDiscovery):
                         self.logger.info(f"匹配成功: {entity_id} → {property_name}（设备: {device_id}）")
                     break
 
-        # 输出匹配结果，重点提示缺失的属性
+        # 输出匹配结果，重点检查active_power和energy
         for device_id, device_data in matched_devices.items():
             device = device_data["config"]
-            missing_props = [p for p in device["supported_properties"] if p not in device_data["entities"]]
+            active_power_status = "已匹配" if "active_power" in device_data["entities"] else "未匹配"
+            energy_status = "已匹配" if "energy" in device_data["entities"] else "未匹配"
             self.logger.info(
-                f"设备 {device_id} 匹配结果: {device_data['entities']} → "
-                f"缺失属性: {missing_props if missing_props else '无'}"
+                f"设备 {device_id} 关键属性状态: "
+                f"active_power={active_power_status}, energy={energy_status} → "
+                f"所有匹配: {device_data['entities']}"
             )
 
         return matched_devices
