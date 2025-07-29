@@ -36,7 +36,7 @@
                 "device_name": "",
                 "device_secret": "",
                 "ha_entity_prefix": "",
-                "supported_properties": ["state", "voltage", "current", "active_power"],
+                "supported_properties": ["state", "voltage", "current", "active_power", "energy"],
                 "enabled": true,
                 "type": "switch"
             },
