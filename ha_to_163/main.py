@@ -1,273 +1,208 @@
-import paho.mqtt.client as mqtt
 import logging
-import json
 import time
-import re
-from typing import Dict, Any
+import json
+import signal
+import requests
+from utils.config_loader import ConfigLoader
+from utils.mqtt_client import MQTTClient
+from device_discovery.ha_discovery import HADiscovery
 
-class MQTTClient:
-    def __init__(self, config, device_discovery):
-        self.config = config
-        self.device_discovery = device_discovery
-        self.client = mqtt.Client()
-        self.logger = logging.getLogger("mqtt_client")
+
+class HAto163Gateway:
+    def __init__(self):
+        # 加载配置
+        self.config_loader = ConfigLoader()
+        self.config = self.config_loader.config
+        self.logger = logging.getLogger("ha_to_163")
+
+        # 初始化HA请求头
+        self.ha_headers = {
+            "Authorization": f"Bearer {self.config['ha_token']}",
+            "Content-Type": "application/json"
+        }
+
+        # 设备与MQTT客户端（broker配置从config读取）
         self.matched_devices = {}
+        self.mqtt_client = MQTTClient(self.config)  # MQTT客户端使用broker配置
+        self.running = True
 
-    def set_matched_devices(self, matched_devices):
-        """设置设备匹配结果"""
-        self.matched_devices = matched_devices
-        self.logger.info(f"已接收设备匹配结果，共{len(matched_devices)}个设备")
+        # 注册退出信号
+        signal.signal(signal.SIGINT, self._stop)
+        signal.signal(signal.SIGTERM, self._stop)
 
-    def connect(self):
-        """连接到MQTT服务器"""
-        # 设置回调函数
-        self.client.on_connect = self._on_connect
-        self.client.on_message = self._on_message
-        
-        # 设置认证信息
-        if "mqtt_username" in self.config and "mqtt_password" in self.config:
-            self.client.username_pw_set(
-                self.config["mqtt_username"],
-                self.config["mqtt_password"]
-            )
-        
-        # 连接服务器
-        mqtt_host = self.config.get("wy_mqtt_broker", "device.iot.163.com")
-        mqtt_port = self.config.get("wy_mqtt_port_tcp", 1883)
-        
-        self.logger.info(f"连接MQTT服务器: {mqtt_host}:{mqtt_port}")
-        self.client.connect(mqtt_host, mqtt_port, keepalive=60)
-        
-        # 启动网络循环
-        self.client.loop_start()
-        return True
+    def _stop(self, signum, frame):
+        self.logger.info("收到停止信号，正在退出...")
+        self.running = False
+        if hasattr(self, 'mqtt_client') and self.mqtt_client:
+            self.mqtt_client.disconnect()
 
-    def _on_connect(self, client, userdata, flags, rc):
-        """连接成功回调"""
-        if rc == 0:
-            self.logger.info("MQTT连接成功")
-            # 订阅控制主题
-            self._subscribe_control_topics()
-        else:
-            self.logger.error(f"MQTT连接失败，错误码: {rc}")
-
-    def _subscribe_control_topics(self):
-        """订阅设备控制主题"""
-        for device_id, device_data in self.matched_devices.items():
-            device_config = device_data["config"]
-            product_key = device_config.get("product_key")
-            device_name = device_config.get("device_name")
-            
-            if product_key and device_name:
-                control_topic = f"sys/{product_key}/{device_name}/thing/service/property/set"
-                self.client.subscribe(control_topic)
-                self.logger.info(f"订阅控制Topic: {control_topic}")
-                
-                service_topic = f"sys/{product_key}/{device_name}/service/CommonService"
-                self.client.subscribe(service_topic)
-                self.logger.info(f"订阅控制Topic: {service_topic}")
-
-    def _on_message(self, client, userdata, msg):
-        """接收消息回调"""
-        try:
-            payload = json.loads(msg.payload.decode())
-            self.logger.info(f"收到消息: {msg.topic} → {json.dumps(payload, indent=2)}")
-            
-            # 处理消息
-            self._handle_message(msg.topic, payload)
-        except Exception as e:
-            self.logger.error(f"处理消息失败: {e}")
-
-    def _handle_message(self, topic, payload):
-        """处理接收到的消息"""
-        # 解析主题获取设备信息
-        topic_parts = topic.split('/')
-        if len(topic_parts) < 4:
-            self.logger.warning("无效的主题格式")
-            return
-            
-        product_key = topic_parts[1]
-        device_name = topic_parts[2]
-        
-        # 查找对应的设备
-        target_device_id = None
-        target_device_data = None
-        
-        for device_id, device_data in self.matched_devices.items():
-            device_config = device_data["config"]
-            if device_config.get("product_key") == product_key and device_config.get("device_name") == device_name:
-                target_device_id = device_id
-                target_device_data = device_data
-                break
-                
-        if not target_device_id:
-            self.logger.warning(f"未找到匹配的设备: {product_key}/{device_name}")
-            return
-            
-        # 处理状态控制
-        if "params" in payload and "state" in payload["params"]:
-            self._handle_state_control(
-                target_device_id,
-                target_device_data,
-                payload.get("id", int(time.time())),
-                payload["params"]["state"]
-            )
-
-    def _handle_state_control(self, device_id, device_data, msg_id, target_state):
-        """处理状态控制指令（修复实体匹配逻辑）"""
-        try:
-            device_config = device_data["config"]
-            entities = device_data["entities"]
-            device_type = device_config.get("type")
-            ha_prefix = device_config.get("ha_entity_prefix")  # 设备配置的HA实体前缀
-            
-            # 1. 优先使用已匹配的"state"实体（最可靠）
-            if "state" in entities:
-                state_entity = entities["state"]
-                self.logger.info(f"使用预匹配的状态实体: {state_entity}")
-            else:
-                # 2. 未预匹配时，手动查找正确的switch实体
-                self.logger.warning(f"未找到预匹配的state实体，手动查找前缀为{ha_prefix}的switch实体")
-                
-                # 调用HA API获取所有实体，筛选符合条件的switch实体
-                import requests
-                ha_url = self.config.get("ha_url")
-                ha_token = self.config.get("ha_token")
-                headers = {"Authorization": f"Bearer {ha_token}"}
-                
-                # 获取HA所有实体
-                resp = requests.get(f"{ha_url}/api/states", headers=headers, timeout=10)
-                resp.raise_for_status()
-                all_entities = resp.json()
-                
-                # 筛选规则：
-                # - 实体类型为switch（以"switch."开头）
-                # - 包含设备的HA前缀（ha_prefix）
-                # - 实体ID包含"on"或"state"（与开关状态相关）
-                candidate_entities = []
-                for entity in all_entities:
-                    entity_id = entity.get("entity_id", "")
-                    # 严格匹配switch类型
-                    if not entity_id.startswith("switch."):
-                        continue
-                    # 匹配设备前缀
-                    if ha_prefix not in entity_id:
-                        continue
-                    # 优先包含"on"或"state"的实体（与开关控制相关）
-                    if "on" in entity_id or "state" in entity_id:
-                        candidate_entities.insert(0, entity_id)  # 优先放在前面
-                    else:
-                        candidate_entities.append(entity_id)
-                
-                if not candidate_entities:
-                    self.logger.error(f"未找到符合条件的switch实体（前缀: {ha_prefix}）")
-                    self._send_response(device_config, msg_id, 404, "没有可用的开关实体")
-                    return
-                
-                # 选择最可能的实体（第一个候选）
-                state_entity = candidate_entities[0]
-                self.logger.info(f"自动匹配到开关实体: {state_entity}")
-
-            # 发送指令到Home Assistant
-            ha_url = self.config.get("ha_url")
-            ha_token = self.config.get("ha_token")
-            
-            if not ha_url or not ha_token:
-                self.logger.error("Home Assistant配置不完整")
-                self._send_response(device_config, msg_id, 500, "配置不完整")
-                return
-                
-            headers = {
-                "Authorization": f"Bearer {ha_token}",
-                "Content-Type": "application/json"
-            }
-            
-            # 转换状态为HA需要的格式
-            state_value = "on" if target_state == 1 else "off"
-            
-            # 调用HA服务切换状态（确保使用switch服务）
-            response = requests.post(
-                f"{ha_url}/api/services/switch/turn_{state_value}",
-                headers=headers,
-                json={"entity_id": state_entity},
-                timeout=10
-            )
-            
-            # 验证控制结果（关键：检查实体实际状态是否变更）
-            if response.status_code == 200:
-                # 延迟1秒后查询实体状态，确认是否生效
-                time.sleep(1)
-                check_resp = requests.get(
-                    f"{ha_url}/api/states/{state_entity}",
-                    headers=headers,
+    def _wait_for_ha_ready(self) -> bool:
+        """等待Home Assistant就绪"""
+        timeout = self.config.get("entity_ready_timeout", 600)
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                resp = requests.get(
+                    f"{self.config['ha_url']}/api/",
+                    headers=self.ha_headers,
                     timeout=10
                 )
-                check_resp.raise_for_status()
-                actual_state = check_resp.json().get("state", "").lower()
-                
-                if actual_state == state_value:
-                    self.logger.info(f"控制成功: {state_entity} → {state_value}（实际状态已同步）")
-                    self._send_response(device_config, msg_id, 200, "success", {"state": target_state})
-                    # 推送状态更新
-                    self.publish_property_update(device_config, {"state": target_state})
-                else:
-                    self.logger.error(f"控制指令发送成功，但实体状态未变更（实际状态: {actual_state}）")
-                    self._send_response(device_config, msg_id, 502, "实体状态未变更")
-            else:
-                self.logger.error(f"控制失败，HA返回状态码: {response.status_code}，响应: {response.text}")
-                self._send_response(device_config, msg_id, 500, "控制指令发送失败")
-                
+                if resp.status_code == 200:
+                    self.logger.info("Home Assistant已就绪")
+                    return True
+            except Exception as e:
+                self.logger.warning(f"HA未就绪: {e}")
+            time.sleep(10)
+
+        self.logger.error(f"HA超时未就绪（{timeout}秒）")
+        return False
+
+    def _discover_devices(self) -> bool:
+        """执行设备发现（支持多类型）"""
+        discovery = HADiscovery(self.config, self.ha_headers)
+        self.matched_devices = discovery.discover()
+        return len(self.matched_devices) > 0
+
+    def _get_entity_value(self, entity_id: str, device_type: str) -> float or int or None:
+        """获取HA实体值（适配多设备类型：数值/开关状态）"""
+        try:
+            # 等待实体就绪
+            timeout = self.config.get("entity_ready_timeout", 600)
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                resp = requests.get(
+                    f"{self.config['ha_url']}/api/states/{entity_id}",
+                    headers=self.ha_headers,
+                    timeout=5
+                )
+                if resp.status_code == 200:
+                    state = resp.json().get("state")
+                    if state in ("unknown", "unavailable", ""):
+                        time.sleep(5)
+                        continue
+
+                    # 处理开关/插座状态（on→1，off→0）
+                    if device_type in ("switch", "socket") and state in ("on", "off"):
+                        return 1 if state == "on" else 0
+
+                    # 处理数值型（传感器/插座电流功率等）
+                    import re
+                    match = re.search(r'[-+]?\d*\.\d+|\d+', state)
+                    if match:
+                        return float(match.group())
+
+                    self.logger.warning(f"实体 {entity_id} 状态无法转换为有效值: {state}")
+                    return None
+
+                time.sleep(5)
+
+            self.logger.error(f"实体 {entity_id} 超时未就绪")
+            return None
         except Exception as e:
-            self.logger.error(f"处理控制指令失败: {e}", exc_info=True)
-            self._send_response(device_config, msg_id, 500, f"处理失败: {str(e)}")
+            self.logger.error(f"获取实体 {entity_id} 失败: {e}")
+            return None
 
-    def _send_response(self, device_config, msg_id, code, message, data=None):
-        """发送响应到平台"""
-        product_key = device_config.get("product_key")
-        device_name = device_config.get("device_name")
-        
-        if not product_key or not device_name:
-            self.logger.warning("设备配置不完整，无法发送响应")
-            return
-            
-        response_topic = f"sys/{product_key}/{device_name}/service/CommonService_reply"
-        response_payload = {
-            "id": msg_id,
-            "version": "1.0",
-            "code": code,
-            "message": message
-        }
-        
-        if data:
-            response_payload["data"] = data
-            
-        self.client.publish(response_topic, json.dumps(response_payload))
-        self.logger.info(f"发送响应: {response_topic} → {json.dumps(response_payload)}")
+    def _collect_device_data(self, device_id: str) -> dict:
+        """收集设备数据（按类型处理）"""
+        device_data = self.matched_devices[device_id]
+        device_config = device_data["config"]
+        device_type = device_config["type"]
+        entities = device_data["entities"]
 
-    def publish_property_update(self, device_config, params):
-        """发布属性更新到平台"""
-        product_key = device_config.get("product_key")
-        device_name = device_config.get("device_name")
-        
-        if not product_key or not device_name:
-            self.logger.warning("设备配置不完整，无法发布属性更新")
-            return
-            
-        topic = f"sys/{product_key}/{device_name}/event/property/post"
         payload = {
             "id": int(time.time() * 1000),
             "version": "1.0",
-            "params": params
+            "params": {}
         }
-        
-        result = self.client.publish(topic, json.dumps(payload))
-        if result.rc == mqtt.MQTT_ERR_SUCCESS:
-            self.logger.info(f"数据发布成功: {topic} → {json.dumps(payload)}")
-        else:
-            self.logger.error(f"数据发布失败，错误码: {result.rc}")
 
-    def disconnect(self):
-        """断开MQTT连接"""
-        self.client.loop_stop()
-        self.client.disconnect()
-        self.logger.info("MQTT连接已断开")
+        for prop, entity_id in entities.items():
+            value = self._get_entity_value(entity_id, device_type)
+            if value is not None:
+                payload["params"][prop] = value
+                self.logger.info(f"  收集到 {prop} = {value}（实体: {entity_id}）")
+            else:
+                self.logger.warning(f"  未获取到 {prop} 数据（实体: {entity_id}）")
+
+        # 传感器电池默认值处理
+        if device_type == "sensor" and "batt" in device_config["supported_properties"] and "batt" not in payload["params"]:
+            self.logger.warning(f"  未获取到电池数据，使用默认值100")
+            payload["params"]["batt"] = 100
+
+        return payload
+
+    def _push_device_data(self, device_id: str) -> bool:
+        """推送设备数据到网易IoT平台（通过MQTT broker）"""
+        device_data = self.matched_devices[device_id]
+        device_config = device_data["config"]
+
+        # 收集数据
+        payload = self._collect_device_data(device_id)
+        if not payload["params"]:
+            self.logger.warning(f"设备 {device_id} 无有效数据，跳过推送")
+            return False
+
+        # 推送数据（使用配置的broker信息）
+        return self.mqtt_client.publish(device_config, payload)
+
+    def start(self):
+        """启动服务"""
+        self.logger.info("===== HA to 163 Gateway 启动 =====")
+
+        # 启动延迟
+        startup_delay = self.config.get("startup_delay", 120)
+        self.logger.info(f"启动延迟 {startup_delay} 秒...")
+        time.sleep(startup_delay)
+
+        # 等待HA就绪
+        if not self._wait_for_ha_ready():
+            return
+
+        # 连接MQTT broker
+        if not self.mqtt_client.connect():
+            return
+
+        # 初始设备发现
+        if not self._discover_devices():
+            self.logger.error("未匹配到任何设备，服务启动失败")
+            return
+
+        # 主循环
+        self._run_loop()
+
+    def _run_loop(self):
+        """主循环（定时发现与推送）"""
+        push_interval = self.config.get("wy_push_interval", 60)
+        discovery_interval = self.config.get("ha_discovery_interval", 3600)
+        last_discovery = time.time()
+        last_push = time.time()
+
+        while self.running:
+            now = time.time()
+
+            # 定时重新发现设备
+            if now - last_discovery >= discovery_interval:
+                self.logger.info("执行定时设备发现...")
+                self._discover_devices()
+                last_discovery = now
+
+            # 定时推送数据
+            if now - last_push >= push_interval:
+                self.logger.info("开始数据推送...")
+                for device_id in self.matched_devices:
+                    self.logger.info(f"\n推送设备 {device_id} 数据")
+                    self._push_device_data(device_id)
+                last_push = now
+
+            time.sleep(1)
+
+
+if __name__ == "__main__":
+    # 配置日志
+    import os
+
+    logging.basicConfig(
+        level=os.getenv("LOG_LEVEL", "INFO").upper(),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    gateway = HAto163Gateway()
+    gateway.start()
