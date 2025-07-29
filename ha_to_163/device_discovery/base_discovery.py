@@ -12,4 +12,3 @@ class BaseDiscovery:
     def discover(self) -> Dict:
         """执行设备发现，返回发现的设备列表"""
         raise NotImplementedError("子类必须实现discover方法")
-    
