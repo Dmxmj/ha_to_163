@@ -1,4 +1,7 @@
-paho-mqtt==1.6.1
-requests==2.31.0
-ntplib==0.4.0
-    
+# 核心依赖
+paho-mqtt>=1.6.1  # MQTT客户端库，用于与163平台通信
+requests>=2.31.0  # HTTP客户端库，用于与Home Assistant交互
+pyyaml>=6.0.1     # YAML解析库，用于加载配置文件
+
+# 可选依赖（根据实际需求）
+python-dotenv>=1.0.0  # 环境变量管理（如需从.env文件加载配置）
