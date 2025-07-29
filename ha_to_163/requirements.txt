@@ -1,3 +1,3 @@
-paho-mqtt>=1.6.1
-requests>=2.31.0
-# pyyaml在这里可以保留也可以不保留，因为Dockerfile中已经单独安装
+paho-mqtt==1.6.1
+requests==2.31.0
+ntplib==0.4.0
