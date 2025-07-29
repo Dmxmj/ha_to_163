@@ -46,7 +46,7 @@
                 "device_name": "",
                 "device_secret": "",
                 "ha_entity_prefix": "switch.socket_",
-                "supported_properties": ["state", "current", "power"],
+                "supported_properties": ["state", "current", "power", "voltage"],
                 "enabled": true,
                 "type": "socket"
             },
