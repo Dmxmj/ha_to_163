@@ -1,8 +1,8 @@
 {
     "name": "HA to 163 Gateway",
-    "version": "0.1.15",
+    "version": "0.1.16",
     "slug": "ha_to_163",
-    "description": "将Home Assistant设备数据推送到网易IoT平台，支持sensor/switch/socket多类型设备",
+    "description": "将Home Assistant设备数据推送到网易IoT平台，支持sensor/socket/switch多类型设备",
     "arch": [
         "amd64",
         "armv7",
@@ -25,35 +25,35 @@
                 "product_key": "",
                 "device_name": "",
                 "device_secret": "",
-                "ha_entity_prefix": "sensor.hz2_01_",
+                "ha_entity_prefix": "hz2_01_",
                 "supported_properties": ["temp", "hum", "batt"],
                 "enabled": true,
                 "type": "sensor"
             },
             {
-                "id": "switch_001",
+                "id": "sensor_002",
                 "product_key": "",
                 "device_name": "",
                 "device_secret": "",
-                "ha_entity_prefix": "switch.living_room_",
-                "supported_properties": ["state", "power"],
+                "ha_entity_prefix": "hz2_02_",
+                "supported_properties": ["batt"],
                 "enabled": true,
-                "type": "switch"
+                "type": "sensor"
             },
             {
-                "id": "socket_001",
-                "product_key": "",
-                "device_name": "",
+                "id": "switch_001",
+                "product_key": "r9j18d65u907mt9",
+                "device_name": "f42da875-5a4c-4345-ad44-abd167aebe8d",
                 "device_secret": "",
-                "ha_entity_prefix": "switch.socket_",
-                "supported_properties": ["state", "current", "power"],
+                "ha_entity_prefix": "iot_cn_942988692_",  // 核心前缀（去掉switch.，覆盖sensor/switch实体）
+                "supported_properties": ["state", "voltage", "current", "power", "energy"],  // 包含电气参数
                 "enabled": true,
-                "type": "socket"
+                "type": "socket"  // 类型改为socket，支持匹配switch和sensor实体
             }
         ],
         "ha_discovery_interval": 3600,
         "wy_push_interval": 60,
-        "startup_delay": 120,
+        "startup_delay": 30,
         "entity_ready_timeout": 600,
         "retry_attempts": 5,
         "retry_delay": 3,
@@ -79,7 +79,7 @@
                 "ha_entity_prefix": "str",
                 "supported_properties": ["str"],
                 "enabled": "bool",
-                "type": "match(sensor|switch|socket)"
+                "type": "match(sensor|switch|socket)"  // 支持socket类型
             }
         ],
         "ha_discovery_interval": "int",
@@ -97,9 +97,5 @@
     "ingress": false,
     "host_network": false,
     "ports": {},
-    "map": [
-        "config",
-        "ssl",
-        "share"
-    ]
+    "map": ["config", "ssl", "share"]
 }
