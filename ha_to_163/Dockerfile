@@ -1,25 +1,25 @@
-FROM alpine:3.18
+# 使用官方Python镜像作为基础
+FROM python:3.9-slim
 
-# 安装Python和必要工具
-RUN apk add --no-cache python3 py3-pip && \
-    rm -rf /var/cache/apk/*
-
+# 设置工作目录
 WORKDIR /app
 
-# 复制依赖文件
+# 安装系统依赖（如需）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制依赖清单
 COPY requirements.txt .
 
-# 使用多源安装（优先官方源，失败自动切换）
-RUN pip3 install --no-cache-dir \
-    --extra-index-url https://pypi.tuna.tsinghua.edu.cn/simple \
-    --extra-index-url https://pypi.org/simple \
-    requests>=2.25.0 paho-mqtt>=1.5.0 ntplib>=0.3.0
+# 安装Python依赖（使用--no-cache-dir减少镜像体积）
+RUN pip install --no-cache-dir -r requirements.txt
 
-# 验证安装
-RUN pip3 list | grep -E "requests|paho-mqtt|ntplib"
-
-# 复制应用文件
+# 复制项目文件
 COPY . .
-RUN chmod +x /app/run.sh
 
-CMD ["/app/run.sh"]
+# 设置环境变量（可选，如日志级别）
+ENV LOG_LEVEL=INFO
+
+# 启动命令
+CMD ["python", "main.py"]
