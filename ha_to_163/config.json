@@ -1,8 +1,8 @@
 {
     "name": "HA to 163 Gateway",
-    "version": "0.1.18",
+    "version": "0.1.19",
     "slug": "ha_to_163",
-    "description": "将Home Assistant设备数据推送到网易IoT平台，支持switch、socket、breaker",
+    "description": "将Home Assistant设备数据推送到网易IoT平台，支持电气参数调整和频率监测",
     "arch": [
         "amd64",
         "armv7",
@@ -36,7 +36,7 @@
                 "device_name": "",
                 "device_secret": "",
                 "ha_entity_prefix": "",
-                "supported_properties": ["state", "voltage", "current", "power"],
+                "supported_properties": ["state", "voltage", "current", "active_power"],
                 "enabled": true,
                 "type": "switch"
             },
@@ -46,7 +46,7 @@
                 "device_name": "",
                 "device_secret": "",
                 "ha_entity_prefix": "",
-                "supported_properties": ["state", "voltage", "current", "power", "energy"],
+                "supported_properties": ["state", "voltage", "current", "active_power", "energy"],
                 "enabled": true,
                 "type": "socket"
             },
@@ -56,7 +56,7 @@
                 "device_name": "",
                 "device_secret": "",
                 "ha_entity_prefix": "",
-                "supported_properties": ["state", "voltage", "current", "power", "trip_state"],
+                "supported_properties": ["state", "voltage", "current", "active_power", "energy", "frequency"],
                 "enabled": true,
                 "type": "breaker"
             }
@@ -109,3 +109,4 @@
     "ports": {},
     "map": ["config", "ssl", "share"]
 }
+    
