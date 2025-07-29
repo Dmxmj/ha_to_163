@@ -1,208 +1,256 @@
+import paho.mqtt.client as mqtt
 import logging
 import time
+import hmac
+import hashlib
 import json
-import signal
 import requests
-from utils.config_loader import ConfigLoader
-from utils.mqtt_client import MQTTClient
-from device_discovery.ha_discovery import HADiscovery
+from typing import Dict, Any
 
 
-class HAto163Gateway:
-    def __init__(self):
-        # 加载配置
-        self.config_loader = ConfigLoader()
-        self.config = self.config_loader.config
-        self.logger = logging.getLogger("ha_to_163")
-
-        # 初始化HA请求头
+class MQTTClient:
+    """网易IoT平台MQTT客户端（支持指令接收与设备控制）"""
+    
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        self.logger = logging.getLogger("mqtt_client")
+        self.client: mqtt.Client = None
+        self.connected = False
+        self.last_time_sync = 0  # 用于时间同步
+        self.reconnect_delay = 1  # 重连延迟（秒）
+        # 初始化HA请求头（用于控制HA实体）
         self.ha_headers = {
             "Authorization": f"Bearer {self.config['ha_token']}",
             "Content-Type": "application/json"
         }
-
-        # 设备与MQTT客户端（broker配置从config读取）
-        self.matched_devices = {}
-        self.mqtt_client = MQTTClient(self.config)  # MQTT客户端使用broker配置
-        self.running = True
-
-        # 注册退出信号
-        signal.signal(signal.SIGINT, self._stop)
-        signal.signal(signal.SIGTERM, self._stop)
-
-    def _stop(self, signum, frame):
-        self.logger.info("收到停止信号，正在退出...")
-        self.running = False
-        if hasattr(self, 'mqtt_client') and self.mqtt_client:
-            self.mqtt_client.disconnect()
-
-    def _wait_for_ha_ready(self) -> bool:
-        """等待Home Assistant就绪"""
-        timeout = self.config.get("entity_ready_timeout", 600)
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            try:
-                resp = requests.get(
-                    f"{self.config['ha_url']}/api/",
-                    headers=self.ha_headers,
-                    timeout=10
-                )
-                if resp.status_code == 200:
-                    self.logger.info("Home Assistant已就绪")
-                    return True
-            except Exception as e:
-                self.logger.warning(f"HA未就绪: {e}")
-            time.sleep(10)
-
-        self.logger.error(f"HA超时未就绪（{timeout}秒）")
-        return False
-
-    def _discover_devices(self) -> bool:
-        """执行设备发现（支持多类型）"""
-        discovery = HADiscovery(self.config, self.ha_headers)
-        self.matched_devices = discovery.discover()
-        return len(self.matched_devices) > 0
-
-    def _get_entity_value(self, entity_id: str, device_type: str) -> float or int or None:
-        """获取HA实体值（适配多设备类型：数值/开关状态）"""
+    
+    def _init_mqtt_client(self):
+        """初始化MQTT客户端（复用提供的密码生成逻辑）"""
         try:
-            # 等待实体就绪
-            timeout = self.config.get("entity_ready_timeout", 600)
-            start_time = time.time()
-            while time.time() - start_time < timeout:
-                resp = requests.get(
-                    f"{self.config['ha_url']}/api/states/{entity_id}",
-                    headers=self.ha_headers,
-                    timeout=5
-                )
-                if resp.status_code == 200:
-                    state = resp.json().get("state")
-                    if state in ("unknown", "unavailable", ""):
-                        time.sleep(5)
-                        continue
-
-                    # 处理开关/插座状态（on→1，off→0）
-                    if device_type in ("switch", "socket") and state in ("on", "off"):
-                        return 1 if state == "on" else 0
-
-                    # 处理数值型（传感器/插座电流功率等）
-                    import re
-                    match = re.search(r'[-+]?\d*\.\d+|\d+', state)
-                    if match:
-                        return float(match.group())
-
-                    self.logger.warning(f"实体 {entity_id} 状态无法转换为有效值: {state}")
-                    return None
-
-                time.sleep(5)
-
-            self.logger.error(f"实体 {entity_id} 超时未就绪")
-            return None
+            # 网关身份信息
+            client_id = self.config["gateway_device_name"]
+            username = self.config["gateway_product_key"]
+            password = self._generate_mqtt_password(self.config["gateway_device_secret"])
+            
+            self.client = mqtt.Client(client_id=client_id, clean_session=True, protocol=mqtt.MQTTv311)
+            self.client.username_pw_set(username=username, password=password)
+            
+            # SSL配置
+            if self.config.get("use_ssl", False):
+                self.client.tls_set()
+                self.logger.info("已启用SSL加密连接")
+            
+            # 回调函数
+            self.client.on_connect = self._on_connect
+            self.client.on_disconnect = self._on_disconnect
+            self.client.on_message = self._on_message
+            self.logger.info("MQTT客户端初始化完成")
         except Exception as e:
-            self.logger.error(f"获取实体 {entity_id} 失败: {e}")
-            return None
-
-    def _collect_device_data(self, device_id: str) -> dict:
-        """收集设备数据（按类型处理）"""
-        device_data = self.matched_devices[device_id]
-        device_config = device_data["config"]
-        device_type = device_config["type"]
-        entities = device_data["entities"]
-
+            self.logger.error(f"MQTT客户端初始化失败: {e}")
+            raise
+    
+    def _generate_mqtt_password(self, device_secret: str) -> str:
+        """生成MQTT密码（完全复用提供的代码）"""
+        try:
+            # 同步时间（每300秒一次）
+            if time.time() - self.last_time_sync > 300:
+                self._sync_time()
+            
+            # 计算counter（每300秒递增1）
+            timestamp = int(time.time())
+            counter = timestamp // 300
+            self.logger.debug(f"当前counter: {counter}（基于时间戳: {timestamp}）")
+            
+            # HMAC-SHA256计算
+            counter_bytes = str(counter).encode('utf-8')
+            secret_bytes = device_secret.encode('utf-8')
+            hmac_obj = hmac.new(secret_bytes, counter_bytes, hashlib.sha256)
+            token = hmac_obj.digest()[:10].hex().upper()
+            return f"v1:{token}"
+        except Exception as e:
+            self.logger.error(f"生成MQTT密码失败: {e}")
+            raise
+    
+    def _sync_time(self):
+        """同步NTP时间（复用提供的代码）"""
+        try:
+            import ntplib
+            ntp_client = ntplib.NTPClient()
+            response = ntp_client.request(
+                self.config.get("ntp_server", "ntp.n.netease.com"),
+                version=3,
+                timeout=5
+            )
+            self.last_time_sync = time.time()
+            self.logger.info(f"NTP时间同步成功: {time.ctime(response.tx_time)}")
+        except Exception as e:
+            self.logger.warning(f"NTP时间同步失败（使用本地时间）: {e}")
+    
+    def connect(self) -> bool:
+        """连接MQTT服务器"""
+        self._init_mqtt_client()
+        try:
+            port = self.config["wy_mqtt_port_ssl"] if self.config.get("use_ssl") else self.config["wy_mqtt_port_tcp"]
+            self.logger.info(f"连接MQTT服务器: {self.config['wy_mqtt_broker']}:{port}")
+            self.client.connect(self.config["wy_mqtt_broker"], port, keepalive=60)
+            self.client.loop_start()
+            
+            # 等待连接成功（最多10秒）
+            start_time = time.time()
+            while not self.connected and (time.time() - start_time) < 10:
+                time.sleep(0.1)
+            
+            return self.connected
+        except Exception as e:
+            self.logger.error(f"MQTT连接失败: {e}")
+            return False
+    
+    def _on_connect(self, client: mqtt.Client, userdata: Any, flags: Dict, rc: int):
+        """连接回调（订阅子设备控制Topic）"""
+        if rc == 0:
+            self.connected = True
+            self.reconnect_delay = 1  # 重置重连延迟
+            self.logger.info(f"MQTT连接成功（返回码: {rc}）")
+            
+            # 订阅子设备的控制Topic（支持两种格式：标准格式和扩展格式）
+            for device in self.config.get("sub_devices", []):
+                if not device.get("enabled", True):
+                    continue
+                # 标准控制Topic（thing/service/property/set）
+                standard_set_topic = f"sys/{device['product_key']}/{device['device_name']}/thing/service/property/set"
+                # 扩展控制Topic（service/CommonService）
+                common_service_topic = f"sys/{device['product_key']}/{device['device_name']}/service/CommonService"
+                client.subscribe(standard_set_topic, qos=1)
+                client.subscribe(common_service_topic, qos=1)
+                self.logger.info(f"订阅控制Topic: {standard_set_topic}")
+                self.logger.info(f"订阅控制Topic: {common_service_topic}")
+        else:
+            self.connected = False
+            self.logger.error(f"MQTT连接失败（返回码: {rc}）")
+            self._schedule_reconnect()
+    
+    def _on_disconnect(self, client: mqtt.Client, userdata: Any, rc: int):
+        self.connected = False
+        if rc != 0:
+            self.logger.warning(f"MQTT断开连接（返回码: {rc}）")
+            self._schedule_reconnect()
+        else:
+            self.logger.info("MQTT连接正常关闭")
+    
+    def _schedule_reconnect(self):
+        """安排重连（指数退避）"""
+        if self.reconnect_delay < 60:  # 最大延迟60秒
+            self.reconnect_delay *= 2
+        self.logger.info(f"{self.reconnect_delay}秒后尝试重连...")
+        time.sleep(self.reconnect_delay)
+        self.connect()
+    
+    def _on_message(self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage):
+        """处理收到的消息（新增指令解析与执行）"""
+        try:
+            payload = json.loads(msg.payload.decode())
+            self.logger.info(f"收到消息: {msg.topic} → {json.dumps(payload, indent=2)}")
+            
+            # 解析Topic，提取产品密钥和设备名称
+            topic_parts = msg.topic.split('/')
+            if len(topic_parts) >= 3 and topic_parts[0] == "sys":
+                product_key = topic_parts[1]
+                device_name = topic_parts[2]
+                self._handle_control_command(product_key, device_name, payload)
+            
+        except Exception as e:
+            self.logger.error(f"解析消息失败: {e}，原始消息: {msg.payload.decode()}")
+    
+    def _handle_control_command(self, product_key: str, device_name: str, payload: dict):
+        """处理控制指令，调用HA API执行操作"""
+        # 1. 查找匹配的子设备
+        target_device = None
+        for device in self.config.get("sub_devices", []):
+            if (device.get("product_key") == product_key and 
+                device.get("device_name") == device_name and 
+                device.get("enabled", True)):
+                target_device = device
+                break
+        if not target_device:
+            self.logger.warning(f"未找到设备: product_key={product_key}, device_name={device_name}")
+            return
+        
+        # 2. 提取控制参数（兼容两种格式的payload）
+        target_params = None
+        # 格式1: {"params": {"state": 1}, ...}（标准格式）
+        if "params" in payload:
+            target_params = payload["params"]
+        # 格式2: 直接在根节点包含参数（扩展格式）
+        else:
+            target_params = payload
+        
+        # 3. 处理开关设备的状态控制
+        if target_device["type"] == "switch" and "state" in target_params:
+            self._control_switch(target_device, target_params["state"])
+    
+    def _control_switch(self, device: dict, target_state: int):
+        """控制开关设备（调用HA API切换状态）"""
+        # 转换状态格式（1→on，0→off）
+        ha_state = "on" if target_state == 1 else "off"
+        self.logger.info(f"控制开关 {device['id']} 状态为: {ha_state}")
+        
+        # 查找对应的HA实体
+        entity_prefix = device["ha_entity_prefix"]
+        # 从已发现的实体中匹配（这里简化处理，实际应从matched_devices中获取）
+        # 实际场景中建议通过device_id关联到main.py中的matched_devices
+        entity_id = f"{entity_prefix}state"  # 假设实体ID为前缀+state
+        
+        # 调用HA API执行开关操作
+        try:
+            response = requests.post(
+                f"{self.config['ha_url']}/api/services/switch/turn_{ha_state}",
+                headers=self.ha_headers,
+                json={"entity_id": entity_id},
+                timeout=10
+            )
+            if response.status_code == 200:
+                self.logger.info(f"成功控制HA实体 {entity_id} 为 {ha_state}")
+                # 控制成功后可主动上报状态（可选）
+                self._report_switch_state(device, target_state)
+            else:
+                self.logger.error(f"控制HA实体失败，状态码: {response.status_code}，响应: {response.text}")
+        except Exception as e:
+            self.logger.error(f"调用HA API失败: {e}")
+    
+    def _report_switch_state(self, device: dict, state: int):
+        """控制后主动上报开关状态（可选）"""
         payload = {
             "id": int(time.time() * 1000),
             "version": "1.0",
-            "params": {}
+            "params": {"state": state}
         }
-
-        for prop, entity_id in entities.items():
-            value = self._get_entity_value(entity_id, device_type)
-            if value is not None:
-                payload["params"][prop] = value
-                self.logger.info(f"  收集到 {prop} = {value}（实体: {entity_id}）")
-            else:
-                self.logger.warning(f"  未获取到 {prop} 数据（实体: {entity_id}）")
-
-        # 传感器电池默认值处理
-        if device_type == "sensor" and "batt" in device_config["supported_properties"] and "batt" not in payload["params"]:
-            self.logger.warning(f"  未获取到电池数据，使用默认值100")
-            payload["params"]["batt"] = 100
-
-        return payload
-
-    def _push_device_data(self, device_id: str) -> bool:
-        """推送设备数据到网易IoT平台（通过MQTT broker）"""
-        device_data = self.matched_devices[device_id]
-        device_config = device_data["config"]
-
-        # 收集数据
-        payload = self._collect_device_data(device_id)
-        if not payload["params"]:
-            self.logger.warning(f"设备 {device_id} 无有效数据，跳过推送")
+        self.publish(device, payload)
+    
+    def publish(self, device: Dict[str, Any], payload: Dict[str, Any]) -> bool:
+        """发布设备数据（修正上报Topic格式）"""
+        if not self.connected:
+            self.logger.warning("MQTT未连接，无法发布数据")
             return False
-
-        # 推送数据（使用配置的broker信息）
-        return self.mqtt_client.publish(device_config, payload)
-
-    def start(self):
-        """启动服务"""
-        self.logger.info("===== HA to 163 Gateway 启动 =====")
-
-        # 启动延迟
-        startup_delay = self.config.get("startup_delay", 120)
-        self.logger.info(f"启动延迟 {startup_delay} 秒...")
-        time.sleep(startup_delay)
-
-        # 等待HA就绪
-        if not self._wait_for_ha_ready():
-            return
-
-        # 连接MQTT broker
-        if not self.mqtt_client.connect():
-            return
-
-        # 初始设备发现
-        if not self._discover_devices():
-            self.logger.error("未匹配到任何设备，服务启动失败")
-            return
-
-        # 主循环
-        self._run_loop()
-
-    def _run_loop(self):
-        """主循环（定时发现与推送）"""
-        push_interval = self.config.get("wy_push_interval", 60)
-        discovery_interval = self.config.get("ha_discovery_interval", 3600)
-        last_discovery = time.time()
-        last_push = time.time()
-
-        while self.running:
-            now = time.time()
-
-            # 定时重新发现设备
-            if now - last_discovery >= discovery_interval:
-                self.logger.info("执行定时设备发现...")
-                self._discover_devices()
-                last_discovery = now
-
-            # 定时推送数据
-            if now - last_push >= push_interval:
-                self.logger.info("开始数据推送...")
-                for device_id in self.matched_devices:
-                    self.logger.info(f"\n推送设备 {device_id} 数据")
-                    self._push_device_data(device_id)
-                last_push = now
-
-            time.sleep(1)
-
-
-if __name__ == "__main__":
-    # 配置日志
-    import os
-
-    logging.basicConfig(
-        level=os.getenv("LOG_LEVEL", "INFO").upper(),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    gateway = HAto163Gateway()
-    gateway.start()
+        
+        # 上报Topic格式：sys/{子设备productkey}/{子设备devicename}/event/property/post
+        topic = f"sys/{device['product_key']}/{device['device_name']}/event/property/post"
+        try:
+            payload_str = json.dumps(payload)
+            result = self.client.publish(topic, payload_str, qos=1)
+            if result.rc == mqtt.MQTT_ERR_SUCCESS:
+                self.logger.info(f"数据发布成功: {topic} → {payload_str[:50]}...")
+                return True
+            else:
+                self.logger.error(f"数据发布失败（错误码: {result.rc}）: {topic}")
+                return False
+        except Exception as e:
+            self.logger.error(f"发布数据异常: {e}")
+            return False
+    
+    def disconnect(self):
+        """断开MQTT连接"""
+        if self.client:
+            self.client.loop_stop()
+            self.client.disconnect()
+            self.connected = False
+            self.logger.info("MQTT连接已断开")
