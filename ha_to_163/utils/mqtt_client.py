@@ -9,7 +9,7 @@ from typing import Dict, Any
 
 
 class MQTTClient:
-    """完整的MQTT客户端类（确保无语法错误）"""
+    """MQTT客户端，支持新属性上报"""
     
     def __init__(self, config: Dict[str, Any]):
         self.config = config
@@ -279,6 +279,7 @@ class MQTTClient:
         self.publish(device, payload)
     
     def publish(self, device: Dict[str, Any], payload: Dict[str, Any]) -> bool:
+        """发布数据，支持新属性（current, active_power, energy, voltage, frequency）"""
         if not self.connected:
             self.logger.warning("MQTT未连接，无法发布数据")
             return False
@@ -287,6 +288,8 @@ class MQTTClient:
         try:
             payload_str = json.dumps(payload)
             result = self.client.publish(topic, payload_str, qos=1)
+            if result.rc == mqtt.MQTT_ERR_SUCCESS:
+                self.logger.info(f"数据发布成功: {topic} → {payload_str}")
             return result.rc == mqtt.MQTT_ERR_SUCCESS
         except Exception as e:
             self.logger.error(f"发布数据异常: {e}")
@@ -298,3 +301,4 @@ class MQTTClient:
             self.client.disconnect()
             self.connected = False
             self.logger.info("MQTT连接已断开")
+    
