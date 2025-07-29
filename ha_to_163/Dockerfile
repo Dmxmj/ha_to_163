@@ -1,8 +1,11 @@
-# 基于官方Home Assistant基础镜像（直接指定，不依赖BUILD_FROM参数）
-FROM ghcr.io/home-assistant/base/aarch64:latest
+# 使用国内可访问的Home Assistant基础镜像
+FROM registry.cn-shenzhen.aliyuncs.com/home-assistant-docker/aarch64-base:latest
 
 # 设置工作目录
 WORKDIR /app
+
+# 更换国内pip源（加速依赖安装）
+RUN pip3 config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 安装系统依赖
 RUN apk add --no-cache \
