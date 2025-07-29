@@ -1,25 +1,22 @@
-# 使用官方Python镜像作为基础
-FROM python:3.9-slim
+ARG BUILD_FROM
+FROM $BUILD_FROM
 
 # 设置工作目录
 WORKDIR /app
 
-# 安装系统依赖（如需）
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+# 安装系统依赖（确保pip正常工作）
+RUN apk add --no-cache python3 py3-pip
 
-# 复制依赖清单
+# 复制依赖文件
 COPY requirements.txt .
 
-# 安装Python依赖（使用--no-cache-dir减少镜像体积）
-RUN pip install --no-cache-dir -r requirements.txt
+# 强制安装pyyaml和其他依赖
+RUN pip3 install --upgrade pip && \
+    pip3 install --no-cache-dir pyyaml>=6.0.1 && \
+    pip3 install --no-cache-dir -r requirements.txt
 
-# 复制项目文件
+# 复制项目所有文件
 COPY . .
 
-# 设置环境变量（可选，如日志级别）
-ENV LOG_LEVEL=INFO
-
 # 启动命令
-CMD ["python", "main.py"]
+CMD ["python3", "/app/main.py"]
