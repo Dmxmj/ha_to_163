@@ -21,9 +21,9 @@ class HAto163Gateway:
             "Content-Type": "application/json"
         }
 
-        # 设备与MQTT客户端（broker配置从config读取）
+        # 设备与MQTT客户端
         self.matched_devices = {}
-        self.mqtt_client = MQTTClient(self.config)  # MQTT客户端使用broker配置
+        self.mqtt_client = MQTTClient(self.config)
         self.running = True
 
         # 注册退出信号
@@ -58,13 +58,13 @@ class HAto163Gateway:
         return False
 
     def _discover_devices(self) -> bool:
-        """执行设备发现（支持多类型，包括breaker）"""
+        """执行设备发现"""
         discovery = HADiscovery(self.config, self.ha_headers)
         self.matched_devices = discovery.discover()
         return len(self.matched_devices) > 0
 
     def _get_entity_value(self, entity_id: str, device_type: str) -> float or int or None:
-        """获取HA实体值（适配多设备类型：新增breaker支持）"""
+        """获取HA实体值（优化电气参数解析）"""
         try:
             # 等待实体就绪
             timeout = self.config.get("entity_ready_timeout", 600)
@@ -81,18 +81,19 @@ class HAto163Gateway:
                         time.sleep(5)
                         continue
 
-                    # 处理开关/插座/断路器状态（on→1，off→0，trip→2）
+                    # 处理开关/插座/断路器状态
                     if device_type in ("switch", "socket", "breaker"):
                         if state == "on":
                             return 1
                         elif state == "off":
                             return 0
-                        elif state == "trip" and device_type == "breaker":  # 断路器跳闸状态
+                        elif state == "trip" and device_type == "breaker":
                             return 2
 
-                    # 处理数值型（传感器/插座/断路器的电流、电压等）
+                    # 处理数值型（传感器/电气参数）
+                    # 支持带单位的数值（如"220 V" → 220，"1.5 A" → 1.5，"500 Wh" → 500）
                     import re
-                    match = re.search(r'[-+]?\d*\.\d+|\d+', state)
+                    match = re.search(r'[-+]?\d*\.\d+|\d+', state)  # 提取数字部分
                     if match:
                         return float(match.group())
 
@@ -108,7 +109,7 @@ class HAto163Gateway:
             return None
 
     def _collect_device_data(self, device_id: str) -> dict:
-        """收集设备数据（按类型处理，新增breaker）"""
+        """收集设备数据（新增电气参数处理）"""
         device_data = self.matched_devices[device_id]
         device_config = device_data["config"]
         device_type = device_config["type"]
@@ -128,12 +129,27 @@ class HAto163Gateway:
             else:
                 self.logger.warning(f"  未获取到 {prop} 数据（实体: {entity_id}）")
 
-        # 传感器电池默认值处理
+        # 传感器电池默认值
         if device_type == "sensor" and "batt" in device_config["supported_properties"] and "batt" not in payload["params"]:
             self.logger.warning(f"  未获取到电池数据，使用默认值100")
             payload["params"]["batt"] = 100
 
-        # 断路器默认状态处理（未获取到状态时默认为off）
+        # 插座电气参数默认值处理（新增）
+        if device_type == "socket":
+            # 电压默认值（220V）
+            if "voltage" in device_config["supported_properties"] and "voltage" not in payload["params"]:
+                self.logger.warning(f"  未获取到电压数据，使用默认值220")
+                payload["params"]["voltage"] = 220
+            # 电流默认值（0A，未使用时）
+            if "current" in device_config["supported_properties"] and "current" not in payload["params"]:
+                self.logger.warning(f"  未获取到电流数据，使用默认值0")
+                payload["params"]["current"] = 0
+            # 功率默认值（0W，未使用时）
+            if "power" in device_config["supported_properties"] and "power" not in payload["params"]:
+                self.logger.warning(f"  未获取到功率数据，使用默认值0")
+                payload["params"]["power"] = 0
+
+        # 断路器默认状态
         if device_type == "breaker" and "state" in device_config["supported_properties"] and "state" not in payload["params"]:
             self.logger.warning(f"  未获取到断路器状态，使用默认值0（off）")
             payload["params"]["state"] = 0
@@ -141,17 +157,15 @@ class HAto163Gateway:
         return payload
 
     def _push_device_data(self, device_id: str) -> bool:
-        """推送设备数据到网易IoT平台（通过MQTT broker，支持breaker）"""
+        """推送设备数据到网易IoT平台"""
         device_data = self.matched_devices[device_id]
         device_config = device_data["config"]
 
-        # 收集数据
         payload = self._collect_device_data(device_id)
         if not payload["params"]:
             self.logger.warning(f"设备 {device_id} 无有效数据，跳过推送")
             return False
 
-        # 推送数据（使用配置的broker信息）
         return self.mqtt_client.publish(device_config, payload)
 
     def start(self):
@@ -216,3 +230,4 @@ if __name__ == "__main__":
     )
     gateway = HAto163Gateway()
     gateway.start()
+    
