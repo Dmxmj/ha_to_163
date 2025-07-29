@@ -2,7 +2,7 @@
     "name": "HA to 163 Gateway",
     "version": "0.1.18",
     "slug": "ha_to_163",
-    "description": "将Home Assistant设备数据推送到网易IoT平台，支持switch、socket、breaker多类型设备，三元组和实体前缀可在HA页面配置",
+    "description": "将Home Assistant设备数据推送到网易IoT平台，支持switch、socket、breaker",
     "arch": [
         "amd64",
         "armv7",
@@ -14,19 +14,19 @@
     "boot": "auto",
     "options": {
         "ha_url": "http://homeassistant:8123",
-        "ha_token": "",  // 在HA配置页面填写HA的长期令牌
+        "ha_token": "",
         "use_ssl": false,
-        "gateway_product_key": "",  // 网关三元组，在HA页面填写
+        "gateway_product_key": "",
         "gateway_device_name": "",
         "gateway_device_secret": "",
         "sub_devices": [
             {
-                "id": "sensor_001",  // 设备唯一标识（不可修改）
-                "product_key": "",  // 子设备三元组，留空待手动填写
+                "id": "sensor_001",
+                "product_key": "",
                 "device_name": "",
                 "device_secret": "",
-                "ha_entity_prefix": "",  // 实体前缀，留空待手动填写（如"sensor.temp_"）
-                "supported_properties": ["temp", "hum", "batt"],  // 支持的属性
+                "ha_entity_prefix": "",
+                "supported_properties": ["temp", "hum", "batt"],
                 "enabled": true,
                 "type": "sensor"
             },
@@ -35,7 +35,7 @@
                 "product_key": "",
                 "device_name": "",
                 "device_secret": "",
-                "ha_entity_prefix": "",  // 如"switch.living_room_"
+                "ha_entity_prefix": "",
                 "supported_properties": ["state", "voltage", "current", "power"],
                 "enabled": true,
                 "type": "switch"
@@ -45,7 +45,7 @@
                 "product_key": "",
                 "device_name": "",
                 "device_secret": "",
-                "ha_entity_prefix": "",  // 如"socket.kitchen_"
+                "ha_entity_prefix": "",
                 "supported_properties": ["state", "voltage", "current", "power", "energy"],
                 "enabled": true,
                 "type": "socket"
@@ -55,15 +55,15 @@
                 "product_key": "",
                 "device_name": "",
                 "device_secret": "",
-                "ha_entity_prefix": "",  // 如"breaker.main_"
+                "ha_entity_prefix": "",
                 "supported_properties": ["state", "voltage", "current", "power", "trip_state"],
                 "enabled": true,
                 "type": "breaker"
             }
         ],
-        "ha_discovery_interval": 3600,  // 设备发现间隔（秒）
-        "wy_push_interval": 60,  // 数据推送间隔（秒）
-        "startup_delay": 30,  // 启动延迟（秒）
+        "ha_discovery_interval": 3600,
+        "wy_push_interval": 60,
+        "startup_delay": 30,
         "entity_ready_timeout": 600,
         "retry_attempts": 5,
         "retry_delay": 3,
