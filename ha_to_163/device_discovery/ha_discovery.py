@@ -5,7 +5,7 @@ import time
 from typing import Dict
 from .base_discovery import BaseDiscovery
 
-# 增强电气参数映射（覆盖所有可能的关键词变体）
+# 调整后的属性映射关系
 PROPERTY_MAPPING = {
     # 基础属性
     "temperature": "temp",
@@ -18,29 +18,39 @@ PROPERTY_MAPPING = {
     "on": "state",
     "off": "state",
 
-    # 电气参数（重点覆盖）
-    # 电流
+    # 电气参数（按需求调整）
+    # 电流：electric_current → current
     "current": "current",
     "electric_current": "current",
     "curr": "current",
     "electric_curr": "current",
-    # 电压
-    "voltage": "voltage",
-    "vol": "voltage",
-    "electric_vol": "voltage",
-    # 功率
-    "power": "power",
-    "electric_power": "power",
-    "active_power": "power",
-    # 用电量
+    
+    # 电功率：electric_power → active_power
+    "power": "active_power",
+    "electric_power": "active_power",
+    "active_power": "active_power",
+    
+    # 耗电量：power_consumption → energy
     "energy": "energy",
     "power_consumption": "energy",
     "kwh": "energy",
     "consumption": "energy",
+    
+    # 电压：voltage → voltage
+    "voltage": "voltage",
+    "vol": "voltage",
+    "electric_vol": "voltage",
+    
+    # 新增频率：frequency → frequency
+    "frequency": "frequency",
+    "freq": "frequency",
+    "electric_freq": "frequency"
 }
 
 
 class HADiscovery(BaseDiscovery):
+    """调整实体映射关系，支持频率发现"""
+
     def __init__(self, config, ha_headers):
         super().__init__(config, "ha_discovery")
         self.ha_url = config.get("ha_url")
@@ -124,7 +134,7 @@ class HADiscovery(BaseDiscovery):
                     if entity_type != device_type:
                         continue
 
-                # 关键优化：移除实体后缀中的额外标识（如_p_2_1、_p3等）
+                # 移除实体后缀中的额外标识（如_p_2_1、_p3等）
                 cleaned_suffix = re.sub(r'_p\d+(_\d+)?$', '', entity_core)  # 去除_p_2_1等后缀
                 cleaned_suffix = cleaned_suffix.replace(core_prefix, "").strip('_')
                 self.logger.debug(f"实体核心处理后: {cleaned_suffix}（原始: {entity_core}）")
@@ -137,7 +147,7 @@ class HADiscovery(BaseDiscovery):
                     property_name = PROPERTY_MAPPING[cleaned_suffix]
                     self.logger.debug(f"完整匹配: {cleaned_suffix} → {property_name}")
 
-                # 2. 拆分匹配（处理多词组合，如electric_current）
+                # 2. 拆分匹配（处理多词组合）
                 if not property_name:
                     for part in cleaned_suffix.split('_'):
                         if part in PROPERTY_MAPPING:
@@ -173,3 +183,4 @@ class HADiscovery(BaseDiscovery):
         matched_devices = self.match_entities_to_devices()
         self.logger.info(f"设备发现完成，共匹配 {len(matched_devices)} 个设备")
         return matched_devices
+    
