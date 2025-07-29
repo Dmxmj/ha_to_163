@@ -1,8 +1,8 @@
 {
     "name": "HA to 163 Gateway",
-    "version": "0.1.19",
+    "version": "0.1.15",
     "slug": "ha_to_163",
-    "description": "将Home Assistant设备数据推送到网易IoT平台，支持电气参数调整和频率监测",
+    "description": "将Home Assistant设备数据推送到网易IoT平台，支持sensor/switch/socket多类型设备",
     "arch": [
         "amd64",
         "armv7",
@@ -25,7 +25,7 @@
                 "product_key": "",
                 "device_name": "",
                 "device_secret": "",
-                "ha_entity_prefix": "",
+                "ha_entity_prefix": "sensor.hz2_01_",
                 "supported_properties": ["temp", "hum", "batt"],
                 "enabled": true,
                 "type": "sensor"
@@ -35,8 +35,8 @@
                 "product_key": "",
                 "device_name": "",
                 "device_secret": "",
-                "ha_entity_prefix": "",
-                "supported_properties": ["state", "voltage", "current", "active_power", "energy"],
+                "ha_entity_prefix": "switch.living_room_",
+                "supported_properties": ["state", "power"],
                 "enabled": true,
                 "type": "switch"
             },
@@ -45,25 +45,15 @@
                 "product_key": "",
                 "device_name": "",
                 "device_secret": "",
-                "ha_entity_prefix": "",
-                "supported_properties": ["state", "voltage", "current", "active_power", "energy"],
+                "ha_entity_prefix": "switch.socket_",
+                "supported_properties": ["state", "current", "power"],
                 "enabled": true,
                 "type": "socket"
-            },
-            {
-                "id": "breaker_001",
-                "product_key": "",
-                "device_name": "",
-                "device_secret": "",
-                "ha_entity_prefix": "",
-                "supported_properties": ["state", "voltage", "current", "active_power", "energy", "frequency"],
-                "enabled": true,
-                "type": "breaker"
             }
         ],
         "ha_discovery_interval": 3600,
         "wy_push_interval": 60,
-        "startup_delay": 30,
+        "startup_delay": 120,
         "entity_ready_timeout": 600,
         "retry_attempts": 5,
         "retry_delay": 3,
@@ -89,7 +79,7 @@
                 "ha_entity_prefix": "str",
                 "supported_properties": ["str"],
                 "enabled": "bool",
-                "type": "match(sensor|switch|socket|breaker)"
+                "type": "match(sensor|switch|socket)"
             }
         ],
         "ha_discovery_interval": "int",
@@ -107,5 +97,9 @@
     "ingress": false,
     "host_network": false,
     "ports": {},
-    "map": ["config", "ssl", "share"]
+    "map": [
+        "config",
+        "ssl",
+        "share"
+    ]
 }
