@@ -1,6 +1,5 @@
-# 基于官方Home Assistant基础镜像
-ARG BUILD_FROM=ghcr.io/home-assistant/base/aarch64:latest
-FROM $BUILD_FROM
+# 基于官方Home Assistant基础镜像（直接指定，不依赖BUILD_FROM参数）
+FROM ghcr.io/home-assistant/base/aarch64:latest
 
 # 设置工作目录
 WORKDIR /app
@@ -23,3 +22,4 @@ COPY . .
 
 # 启动命令
 CMD ["python3", "/app/main.py"]
+    
