@@ -3,6 +3,7 @@ import time
 import json
 import signal
 import requests
+import re
 from utils.config_loader import ConfigLoader
 from utils.mqtt_client import MQTTClient
 from device_discovery.ha_discovery import HADiscovery
@@ -21,9 +22,12 @@ class HAto163Gateway:
             "Content-Type": "application/json"
         }
 
-        # 设备与MQTT客户端
+        # 设备发现（在MQTT客户端之前初始化）
         self.matched_devices = {}
-        self.mqtt_client = MQTTClient(self.config)
+        self.discovery = HADiscovery(self.config, self.ha_headers)
+        
+        # 初始化MQTT客户端（传入设备发现实例）
+        self.mqtt_client = MQTTClient(self.config, self.discovery)
         self.running = True
 
         # 注册退出信号
@@ -59,8 +63,9 @@ class HAto163Gateway:
 
     def _discover_devices(self) -> bool:
         """执行设备发现"""
-        discovery = HADiscovery(self.config, self.ha_headers)
-        self.matched_devices = discovery.discover()
+        self.matched_devices = self.discovery.discover()
+        # 将匹配结果同步给MQTT客户端
+        self.mqtt_client.set_matched_devices(self.matched_devices)
         return len(self.matched_devices) > 0
 
     def _get_entity_value(self, entity_id: str, device_type: str) -> float or int or None:
@@ -92,7 +97,6 @@ class HAto163Gateway:
 
                     # 处理数值型（传感器/电气参数）
                     # 支持带单位的数值（如"220 V" → 220，"1.5 A" → 1.5，"500 Wh" → 500）
-                    import re
                     match = re.search(r'[-+]?\d*\.\d+|\d+', state)  # 提取数字部分
                     if match:
                         return float(match.group())
@@ -134,7 +138,7 @@ class HAto163Gateway:
             self.logger.warning(f"  未获取到电池数据，使用默认值100")
             payload["params"]["batt"] = 100
 
-        # 插座电气参数默认值处理（新增）
+        # 插座电气参数默认值处理
         if device_type == "socket":
             # 电压默认值（220V）
             if "voltage" in device_config["supported_properties"] and "voltage" not in payload["params"]:
@@ -230,4 +234,3 @@ if __name__ == "__main__":
     )
     gateway = HAto163Gateway()
     gateway.start()
-    
