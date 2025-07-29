@@ -5,7 +5,7 @@ import time
 from typing import Dict
 from .base_discovery import BaseDiscovery
 
-# 扩展属性映射（新增电气参数）
+# 电气参数映射（覆盖electric_power、electric_current等关键词）
 PROPERTY_MAPPING = {
     # 基础传感器属性
     "temperature": "temp",
@@ -20,46 +20,36 @@ PROPERTY_MAPPING = {
     "on": "state",
     "off": "state",
 
-    # 电气参数（新增）
-    "voltage": "voltage",       # 电压
-    "vol": "voltage",           # 电压简写
-    "current": "current",       # 电流
-    "curr": "current",          # 电流简写
-    "power": "power",           # 功率（即时功率）
-    "active_power": "power",    # 有功功率
-    "energy": "energy",         # 用电量（累计）
-    "electricity": "energy",    # 电量简写
-    "kwh": "energy",            # 千瓦时（用电量单位）
-
-    # 带后缀的扩展映射
-    "voltage_p": "voltage",
-    "current_p": "current",
-    "power_p": "power",
-    "energy_p": "energy",
-    "temp_p": "temp",
-    "hum_p": "hum",
-    "batt_p": "batt"
+    # 电气参数（重点适配用户实体命名）
+    "voltage": "voltage",  # 电压
+    "electric_current": "current",  # 电流（适配electric_current）
+    "current": "current",  # 兼容直接current命名
+    "electric_power": "power",  # 电功率（适配electric_power）
+    "power": "power",  # 兼容直接power命名
+    "power_consumption": "energy",  # 耗电量（适配power_consumption）
+    "energy": "energy",  # 兼容直接energy命名
 }
 
 
 class HADiscovery(BaseDiscovery):
-    """支持电气参数匹配的设备发现逻辑"""
+    """适配电气参数匹配的设备发现类"""
 
     def __init__(self, config, ha_headers):
         super().__init__(config, "ha_discovery")
         self.ha_url = config.get("ha_url")
         self.ha_headers = ha_headers
-        self.entities = []  # 存储HA中的实体列表
+        self.entities = []  # 存储HA实体
         self.sub_devices = [d for d in config.get("sub_devices", []) if d.get("enabled", True)]
 
     def load_ha_entities(self) -> bool:
-        """从HA API加载所有实体（不变）"""
+        """加载HA所有实体（包含sensor/switch等）"""
         try:
             self.logger.info(f"从HA获取实体列表: {self.ha_url}/api/states")
             resp = None
             retry_attempts = self.config.get("retry_attempts", 5)
             retry_delay = self.config.get("retry_delay", 3)
 
+            # 带重试的API调用
             for attempt in range(retry_attempts):
                 try:
                     resp = requests.get(
@@ -80,27 +70,16 @@ class HADiscovery(BaseDiscovery):
 
             self.entities = resp.json()
             self.logger.info(f"HA共返回 {len(self.entities)} 个实体")
-
-            # 按类型输出实体列表（便于调试）
-            entity_types = {}
-            for e in self.entities:
-                entity_id = e.get('entity_id', '')
-                prefix = entity_id.split('.')[0] if '.' in entity_id else 'unknown'
-                if prefix not in entity_types:
-                    entity_types[prefix] = []
-                entity_types[prefix].append(entity_id)
-            for typ, ids in entity_types.items():
-                self.logger.debug(f"HA中{typ}类型实体: {ids}")
             return True
         except Exception as e:
             self.logger.error(f"加载HA实体失败: {e}")
             return False
 
     def match_entities_to_devices(self) -> Dict:
-        """匹配实体到设备（优化电气参数匹配，支持跨类型实体）"""
+        """匹配实体到设备（核心逻辑：忽略实体类型前缀，仅匹配核心前缀）"""
         matched_devices = {}
 
-        # 初始化设备匹配容器
+        # 初始化设备容器
         for device in self.sub_devices:
             device_id = device["id"]
             device_type = device["type"]
@@ -109,92 +88,83 @@ class HADiscovery(BaseDiscovery):
                 "entities": {},  # {属性: 实体ID}
                 "last_data": None
             }
-            self.logger.info(f"开始匹配{device_type}设备: {device_id}（前缀: {device['ha_entity_prefix']}）")
+            self.logger.info(f"开始匹配{device_type}设备: {device_id}（核心前缀: {device['ha_entity_prefix']}）")
 
-        # 遍历HA实体进行匹配
+        # 遍历HA实体匹配
         for entity in self.entities:
             entity_id = entity.get("entity_id", "")
             if "." not in entity_id:
-                continue  # 无效实体ID跳过
-            entity_type = entity_id.split('.')[0]  # 实体类型（sensor/switch等）
+                continue  # 无效实体ID
+            # 提取实体ID的核心部分（去掉"switch."/"sensor."等类型前缀）
+            entity_core = entity_id.split('.', 1)[1]  # 如"switch.iot_cn_942988692_jdls1_on" → "iot_cn_942988692_jdls1_on"
+            entity_type = entity_id.split('.')[0]  # 实体类型（switch/sensor）
 
-            # 提取实体属性
+            # 设备属性
             attributes = entity.get("attributes", {})
-            device_class = attributes.get("device_class", "").lower()
             friendly_name = attributes.get("friendly_name", "").lower()
-            self.logger.debug(
-                f"处理实体: {entity_id} (类型: {entity_type}, device_class: {device_class}, 名称: {friendly_name})"
-            )
+            self.logger.debug(f"处理实体: {entity_id}（核心部分: {entity_core}，名称: {friendly_name}）")
 
-            # 匹配到对应的子设备
+            # 匹配对应设备
             for device_id, device_data in matched_devices.items():
                 device = device_data["config"]
                 device_type = device["type"]
-                prefix = device["ha_entity_prefix"]
+                core_prefix = device["ha_entity_prefix"]  # 设备的核心前缀（如"iot_cn_942988692_"）
 
-                # 核心优化：允许插座（socket）匹配sensor类型的电气参数实体
-                # 规则：插座设备可匹配switch（状态）和sensor（电气参数）类型实体
-                if not (
-                    (device_type == "socket" and entity_type in ("switch", "sensor")) or  # 插座特殊处理
-                    (device_type == entity_type)  # 其他设备（如switch/breaker）严格匹配类型
-                ):
+                # 核心匹配条件：实体核心部分包含设备的核心前缀
+                if core_prefix not in entity_core:
                     continue
 
-                # 前缀匹配（实体ID包含设备的ha_entity_prefix）
-                if prefix in entity_id:
-                    # 提取实体属性部分（如"sensor.iot_cn_942988692_voltage" → "voltage"）
-                    entity_type_parts = entity_id.replace(prefix, "").strip('_').split('_')
-                    entity_prop = '_'.join(entity_type_parts)
-                    if not entity_prop:
-                        continue
+                # 允许socket类型匹配switch（状态）和sensor（电气参数）实体
+                if device_type == "socket" and entity_type not in ("switch", "sensor"):
+                    continue
+                # 其他设备（如sensor/switch）严格匹配实体类型
+                if device_type != "socket" and entity_type != device_type:
+                    continue
 
-                    # 多维度匹配属性（优先device_class，再关键词）
-                    property_name = None
+                # 提取实体核心部分的属性关键词（如"iot_cn_942988692_electric_power" → "electric_power"）
+                entity_suffix = entity_core.replace(core_prefix, "").strip('_')
+                if not entity_suffix:
+                    continue
 
-                    # 1. 通过device_class匹配（HA标准设备类）
-                    if device_class in PROPERTY_MAPPING:
-                        property_name = PROPERTY_MAPPING[device_class]
-                        self.logger.debug(f"通过device_class匹配: {device_class} → {property_name}")
+                # 匹配属性（优先完整匹配，再拆分匹配）
+                property_name = None
+                # 1. 完整后缀匹配（如"electric_power"）
+                if entity_suffix in PROPERTY_MAPPING:
+                    property_name = PROPERTY_MAPPING[entity_suffix]
+                    self.logger.debug(f"完整后缀匹配: {entity_suffix} → {property_name}")
+                # 2. 拆分后缀匹配（如"electric_current"拆分为"electric"和"current"）
+                if not property_name:
+                    for part in entity_suffix.split('_'):
+                        if part in PROPERTY_MAPPING:
+                            property_name = PROPERTY_MAPPING[part]
+                            self.logger.debug(f"拆分部分匹配: {part} → {property_name}")
+                            break
+                # 3. 名称匹配（如名称含"电压"对应"voltage"）
+                if not property_name:
+                    for key, prop in PROPERTY_MAPPING.items():
+                        if key in friendly_name:
+                            property_name = prop
+                            self.logger.debug(f"名称匹配: {key} → {property_name}")
+                            break
 
-                    # 2. 通过实体ID部分匹配（关键词）
-                    if not property_name:
-                        for part in entity_type_parts:
-                            if part in PROPERTY_MAPPING:
-                                property_name = PROPERTY_MAPPING[part]
-                                self.logger.debug(f"通过实体ID部分匹配: {part} → {property_name}")
-                                break
-
-                    # 3. 通过friendly_name匹配（名称包含关键词）
-                    if not property_name:
-                        for key in PROPERTY_MAPPING:
-                            if key in friendly_name:
-                                property_name = PROPERTY_MAPPING[key]
-                                self.logger.debug(f"通过friendly_name匹配: {key} → {property_name}")
-                                break
-
-                    # 验证属性是否在设备支持列表中
-                    if property_name and property_name in device["supported_properties"]:
-                        # 避免重复匹配（同一属性保留第一个匹配的实体）
-                        if property_name not in device_data["entities"]:
-                            device_data["entities"][property_name] = entity_id
-                            self.logger.info(f"匹配成功: {entity_id} → {property_name}（设备: {device_id}）")
-                        break  # 已匹配到设备，跳出循环
+                # 验证属性是否在设备支持列表中
+                if property_name and property_name in device["supported_properties"]:
+                    if property_name not in device_data["entities"]:
+                        device_data["entities"][property_name] = entity_id
+                        self.logger.info(f"匹配成功: {entity_id} → {property_name}（设备: {device_id}）")
+                    break  # 已匹配到设备，跳出循环
 
         # 输出匹配结果
         for device_id, device_data in matched_devices.items():
-            entities = {k: v for k, v in device_data["entities"].items()}
-            self.logger.info(f"设备 {device_id} 匹配结果: {entities}")
+            self.logger.info(f"设备 {device_id} 最终匹配实体: {device_data['entities']}")
 
         return matched_devices
 
     def discover(self) -> Dict:
-        """执行发现流程（主入口）"""
-        self.logger.info("开始基于HA实体的设备发现...")
-
+        """执行发现流程"""
+        self.logger.info("开始设备发现...")
         if not self.load_ha_entities():
             return {}
-
         matched_devices = self.match_entities_to_devices()
         self.logger.info(f"设备发现完成，共匹配 {len(matched_devices)} 个设备")
         return matched_devices
-    
