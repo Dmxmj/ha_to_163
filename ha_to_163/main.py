@@ -114,8 +114,10 @@ class HAto163Gateway:
         device_config = device_data["config"]
         device_type = device_config["type"]
         entities = device_data["entities"]
-        # 获取转换系数配置（默认空字典）
+        
+        # 获取转换系数（默认空字典）
         conversion_factors = device_config.get("conversion_factors", {})
+        self.logger.debug(f"设备 {device_id} 转换系数: {conversion_factors}")
 
         payload = {
             "id": int(time.time() * 1000),
@@ -133,13 +135,17 @@ class HAto163Gateway:
                 # 保留小数位数
                 if prop == "current":
                     converted_value = round(converted_value, 2)
-                elif prop in ("active_power", "voltage", "frequency"):
+                elif prop in ("active_power", "voltage", "frequency", "power"):
                     converted_value = round(converted_value, 1)
                 elif prop == "energy":
-                    converted_value = round(converted_value, 3)  # 耗电量保留3位小数
+                    converted_value = round(converted_value, 3)
+                elif prop in ("temp", "hum", "batt"):
+                    converted_value = round(converted_value, 1)
                 
                 payload["params"][prop] = converted_value
-                self.logger.info(f"  收集到 {prop} = {value} * {factor} = {converted_value}（实体: {entity_id}）")
+                self.logger.info(
+                    f"  收集到 {prop} = {value} * {factor} = {converted_value}（实体: {entity_id}）"
+                )
             else:
                 self.logger.warning(f"  未获取到 {prop} 数据（实体: {entity_id}）")
 
@@ -148,7 +154,7 @@ class HAto163Gateway:
             factor = conversion_factors.get("batt", 1.0)
             default_batt = 100 * factor
             self.logger.warning(f"  未获取到电池数据，使用默认值100 * {factor} = {default_batt}")
-            payload["params"]["batt"] = default_batt
+            payload["params"]["batt"] = round(default_batt, 1)
 
         # 插座电气参数默认值处理（应用转换系数）
         if device_type == "socket":
@@ -157,21 +163,21 @@ class HAto163Gateway:
                 factor = conversion_factors.get("voltage", 1.0)
                 default_voltage = 220 * factor
                 self.logger.warning(f"  未获取到电压数据，使用默认值220 * {factor} = {default_voltage}")
-                payload["params"]["voltage"] = default_voltage
+                payload["params"]["voltage"] = round(default_voltage, 1)
             # 电流默认值（0A）
             if "current" in device_config["supported_properties"] and "current" not in payload["params"]:
                 factor = conversion_factors.get("current", 1.0)
                 default_current = 0 * factor
                 self.logger.warning(f"  未获取到电流数据，使用默认值0 * {factor} = {default_current}")
-                payload["params"]["current"] = default_current
+                payload["params"]["current"] = round(default_current, 2)
             # 功率默认值（0W）
-            if "active_power" in device_config["supported_properties"] and "active_power" not in payload["params"]:
-                factor = conversion_factors.get("active_power", 1.0)
+            if "power" in device_config["supported_properties"] and "power" not in payload["params"]:
+                factor = conversion_factors.get("power", 1.0)
                 default_power = 0 * factor
                 self.logger.warning(f"  未获取到功率数据，使用默认值0 * {factor} = {default_power}")
-                payload["params"]["active_power"] = default_power
+                payload["params"]["power"] = round(default_power, 1)
 
-        # 断路器默认状态
+        # 断路器默认状态（无需转换系数）
         if device_type == "breaker" and "state" in device_config["supported_properties"] and "state" not in payload["params"]:
             self.logger.warning(f"  未获取到断路器状态，使用默认值0（off）")
             payload["params"]["state"] = 0
