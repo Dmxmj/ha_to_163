@@ -27,7 +27,7 @@
                 "device_secret": "",
                 "ha_entity_prefix": "",
                 "supported_properties": ["temp", "hum", "batt"],
-                "conversion_factors": {},  // 新增：转换系数默认值
+                "conversion_factors": {},
                 "enabled": true,
                 "type": "sensor"
             },
@@ -38,7 +38,7 @@
                 "device_secret": "",
                 "ha_entity_prefix": "",
                 "supported_properties": ["state", "voltage", "current", "active_power"],
-                "conversion_factors": {},  // 新增：转换系数默认值
+                "conversion_factors": {},
                 "enabled": true,
                 "type": "switch"
             },
@@ -49,7 +49,7 @@
                 "device_secret": "",
                 "ha_entity_prefix": "",
                 "supported_properties": ["state", "voltage", "current", "active_power", "energy"],
-                "conversion_factors": {},  // 新增：转换系数默认值
+                "conversion_factors": {},
                 "enabled": true,
                 "type": "socket"
             },
@@ -60,7 +60,7 @@
                 "device_secret": "",
                 "ha_entity_prefix": "",
                 "supported_properties": ["state", "voltage", "current", "active_power", "energy", "frequency"],
-                "conversion_factors": {},  // 新增：转换系数默认值
+                "conversion_factors": {},
                 "enabled": true,
                 "type": "breaker"
             }
@@ -92,7 +92,7 @@
                 "device_secret": "str",
                 "ha_entity_prefix": "str",
                 "supported_properties": ["str"],
-                "conversion_factors": "map",  // 修复：使用map类型替代对象定义
+                "conversion_factors": "map",
                 "enabled": "bool",
                 "type": "match(sensor|switch|socket|breaker)"
             }
@@ -113,6 +113,6 @@
     "host_network": false,
     "ports": {},
     "map": ["config", "ssl", "share"],
-    "devices": [],  // 修复：移除full device access，只保留选择性访问
+    "devices": [],
     "privileged": []
 }
