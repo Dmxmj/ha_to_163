@@ -55,11 +55,12 @@ class ConfigLoader:
         if not self.config.get("ha_url") or not self.config.get("ha_token"):
             raise ValueError("缺少HA URL或Token配置")
         
-        # 验证子设备配置
+        # 验证子设备配置（忽略conversion_factors，无需强制检查）
         sub_devices = self.config.get("sub_devices", [])
         for i, device in enumerate(sub_devices):
             if not device.get("enabled", True):
                 continue
+            # 只验证必要字段，转换系数为可选配置
             device_fields = ["product_key", "device_name", "device_secret", "ha_entity_prefix"]
             missing = [f for f in device_fields if not device.get(f)]
             if missing:
