@@ -27,13 +27,9 @@
                 "device_secret": "",
                 "ha_entity_prefix": "",
                 "supported_properties": ["temp", "hum", "batt"],
-                "conversion_factors": {  // 新增：转换系数配置
-                    "temp": 1.0,
-                    "hum": 1.0,
-                    "batt": 1.0
-                },
                 "enabled": true,
-                "type": "sensor"
+                "type": "sensor",
+                "conversion_factors": {}
             },
             {
                 "id": "switch_001",
@@ -42,13 +38,9 @@
                 "device_secret": "",
                 "ha_entity_prefix": "",
                 "supported_properties": ["state", "voltage", "current", "active_power"],
-                "conversion_factors": {  // 新增：转换系数配置
-                    "voltage": 1.0,
-                    "current": 1.0,
-                    "active_power": 1.0
-                },
                 "enabled": true,
-                "type": "switch"
+                "type": "switch",
+                "conversion_factors": {}
             },
             {
                 "id": "socket_001",
@@ -57,14 +49,9 @@
                 "device_secret": "",
                 "ha_entity_prefix": "",
                 "supported_properties": ["state", "voltage", "current", "active_power", "energy"],
-                "conversion_factors": {  // 新增：转换系数配置
-                    "voltage": 1.0,
-                    "current": 1.0,
-                    "active_power": 1.0,
-                    "energy": 1.0  // 重点：energy转换系数
-                },
                 "enabled": true,
-                "type": "socket"
+                "type": "socket",
+                "conversion_factors": {}
             },
             {
                 "id": "breaker_001",
@@ -73,15 +60,9 @@
                 "device_secret": "",
                 "ha_entity_prefix": "",
                 "supported_properties": ["state", "voltage", "current", "active_power", "energy", "frequency"],
-                "conversion_factors": {  // 新增：转换系数配置
-                    "voltage": 1.0,
-                    "current": 1.0,
-                    "active_power": 1.0,
-                    "energy": 1.0,  // 重点：energy转换系数
-                    "frequency": 1.0
-                },
                 "enabled": true,
-                "type": "breaker"
+                "type": "breaker",
+                "conversion_factors": {}
             }
         ],
         "ha_discovery_interval": 3600,
@@ -111,13 +92,13 @@
                 "device_secret": "str",
                 "ha_entity_prefix": "str",
                 "supported_properties": ["str"],
-                "conversion_factors": {  // 新增：schema验证
-                    "type": "object",
-                    "additionalProperties": "float",
-                    "default": {}
-                },
                 "enabled": "bool",
-                "type": "match(sensor|switch|socket|breaker)"
+                "type": "match(sensor|switch|socket|breaker)",
+                "conversion_factors": {
+                    "type": "object",
+                    "default": {},
+                    "description": "属性转换系数（如{\"temp\":0.1,\"current\":1.2}）"
+                }
             }
         ],
         "ha_discovery_interval": "int",
