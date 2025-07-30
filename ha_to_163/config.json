@@ -27,9 +27,9 @@
                 "device_secret": "",
                 "ha_entity_prefix": "",
                 "supported_properties": ["temp", "hum", "batt"],
+                "conversion_factors": {},  // 新增：转换系数默认值
                 "enabled": true,
-                "type": "sensor",
-                "conversion_factors": {}
+                "type": "sensor"
             },
             {
                 "id": "switch_001",
@@ -38,9 +38,9 @@
                 "device_secret": "",
                 "ha_entity_prefix": "",
                 "supported_properties": ["state", "voltage", "current", "active_power"],
+                "conversion_factors": {},  // 新增：转换系数默认值
                 "enabled": true,
-                "type": "switch",
-                "conversion_factors": {}
+                "type": "switch"
             },
             {
                 "id": "socket_001",
@@ -49,9 +49,9 @@
                 "device_secret": "",
                 "ha_entity_prefix": "",
                 "supported_properties": ["state", "voltage", "current", "active_power", "energy"],
+                "conversion_factors": {},  // 新增：转换系数默认值
                 "enabled": true,
-                "type": "socket",
-                "conversion_factors": {}
+                "type": "socket"
             },
             {
                 "id": "breaker_001",
@@ -60,9 +60,9 @@
                 "device_secret": "",
                 "ha_entity_prefix": "",
                 "supported_properties": ["state", "voltage", "current", "active_power", "energy", "frequency"],
+                "conversion_factors": {},  // 新增：转换系数默认值
                 "enabled": true,
-                "type": "breaker",
-                "conversion_factors": {}
+                "type": "breaker"
             }
         ],
         "ha_discovery_interval": 3600,
@@ -92,13 +92,9 @@
                 "device_secret": "str",
                 "ha_entity_prefix": "str",
                 "supported_properties": ["str"],
+                "conversion_factors": "map",  // 修复：使用map类型替代对象定义
                 "enabled": "bool",
-                "type": "match(sensor|switch|socket|breaker)",
-                "conversion_factors": {
-                    "type": "object",
-                    "default": {},
-                    "description": "属性转换系数（如{\"temp\":0.1,\"current\":1.2}）"
-                }
+                "type": "match(sensor|switch|socket|breaker)"
             }
         ],
         "ha_discovery_interval": "int",
@@ -116,5 +112,7 @@
     "ingress": false,
     "host_network": false,
     "ports": {},
-    "map": ["config", "ssl", "share"]
+    "map": ["config", "ssl", "share"],
+    "devices": [],  // 修复：移除full device access，只保留选择性访问
+    "privileged": []
 }
