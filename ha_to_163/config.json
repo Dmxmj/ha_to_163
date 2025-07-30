@@ -27,6 +27,11 @@
                 "device_secret": "",
                 "ha_entity_prefix": "",
                 "supported_properties": ["temp", "hum", "batt"],
+                "conversion_factors": {  // 新增：转换系数配置
+                    "temp": 1.0,
+                    "hum": 1.0,
+                    "batt": 1.0
+                },
                 "enabled": true,
                 "type": "sensor"
             },
@@ -36,7 +41,12 @@
                 "device_name": "",
                 "device_secret": "",
                 "ha_entity_prefix": "",
-                "supported_properties": ["state", "voltage", "current", "active_power", "energy"],
+                "supported_properties": ["state", "voltage", "current", "active_power"],
+                "conversion_factors": {  // 新增：转换系数配置
+                    "voltage": 1.0,
+                    "current": 1.0,
+                    "active_power": 1.0
+                },
                 "enabled": true,
                 "type": "switch"
             },
@@ -47,6 +57,12 @@
                 "device_secret": "",
                 "ha_entity_prefix": "",
                 "supported_properties": ["state", "voltage", "current", "active_power", "energy"],
+                "conversion_factors": {  // 新增：转换系数配置
+                    "voltage": 1.0,
+                    "current": 1.0,
+                    "active_power": 1.0,
+                    "energy": 1.0  // 重点：energy转换系数
+                },
                 "enabled": true,
                 "type": "socket"
             },
@@ -57,6 +73,13 @@
                 "device_secret": "",
                 "ha_entity_prefix": "",
                 "supported_properties": ["state", "voltage", "current", "active_power", "energy", "frequency"],
+                "conversion_factors": {  // 新增：转换系数配置
+                    "voltage": 1.0,
+                    "current": 1.0,
+                    "active_power": 1.0,
+                    "energy": 1.0,  // 重点：energy转换系数
+                    "frequency": 1.0
+                },
                 "enabled": true,
                 "type": "breaker"
             }
@@ -88,6 +111,11 @@
                 "device_secret": "str",
                 "ha_entity_prefix": "str",
                 "supported_properties": ["str"],
+                "conversion_factors": {  // 新增：schema验证
+                    "type": "object",
+                    "additionalProperties": "float",
+                    "default": {}
+                },
                 "enabled": "bool",
                 "type": "match(sensor|switch|socket|breaker)"
             }
@@ -109,4 +137,3 @@
     "ports": {},
     "map": ["config", "ssl", "share"]
 }
-    
