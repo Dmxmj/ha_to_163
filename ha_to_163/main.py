@@ -108,59 +108,62 @@ class HAto163Gateway:
             self.logger.error(f"获取实体 {entity_id} 失败: {e}")
             return None
 
-    def _collect_device_data(self, device_id: str) -> dict:
-        """收集设备数据（新增转换系数处理）"""
-        device_data = self.matched_devices[device_id]
-        device_config = device_data["config"]
-        device_type = device_config["type"]
-        entities = device_data["entities"]
-        # 获取转换系数（默认为空字典）
-        conversion_factors = device_config.get("conversion_factors", {})
+# 在_collect_device_data方法中补充转换系数处理
+def _collect_device_data(self, device_id: str) -> dict:
+    """收集设备数据（应用转换系数）"""
+    device_data = self.matched_devices[device_id]
+    device_config = device_data["config"]
+    device_type = device_config["type"]
+    entities = device_data["entities"]
+    # 获取转换系数配置
+    conversion_factors = device_config.get("conversion_factors", {})
 
-        payload = {
-            "id": int(time.time() * 1000),
-            "version": "1.0",
-            "params": {}
-        }
+    payload = {
+        "id": int(time.time() * 1000),
+        "version": "1.0",
+        "params": {}
+    }
 
-        for prop, entity_id in entities.items():
-            value = self._get_entity_value(entity_id, device_type)
-            if value is not None:
-                # 应用转换系数
-                if prop in conversion_factors:
-                    factor = conversion_factors[prop]
-                    converted_value = value * factor
-                    self.logger.info(f"  收集到 {prop} = {value} → 转换后 = {converted_value}（系数: {factor}，实体: {entity_id}）")
-                    payload["params"][prop] = converted_value
-                else:
-                    payload["params"][prop] = value
-                    self.logger.info(f"  收集到 {prop} = {value}（实体: {entity_id}）")
-            else:
-                self.logger.warning(f"  未获取到 {prop} 数据（实体: {entity_id}）")
+    for prop, entity_id in entities.items():
+        value = self._get_entity_value(entity_id, device_type)
+        if value is not None:
+            # 应用转换系数
+            factor = conversion_factors.get(prop, 1.0)
+            converted_value = value * factor
+            payload["params"][prop] = converted_value
+            self.logger.info(f"  收集到 {prop} = {value} * {factor} = {converted_value}（实体: {entity_id}）")
+        else:
+            self.logger.warning(f"  未获取到 {prop} 数据（实体: {entity_id}）")
 
-        # 传感器电池默认值
-        if device_type == "sensor" and "batt" in device_config["supported_properties"] and "batt" not in payload["params"]:
-            self.logger.warning(f"  未获取到电池数据，使用默认值100")
-            payload["params"]["batt"] = 100
+    # 传感器电池默认值（应用转换系数）
+    if device_type == "sensor" and "batt" in device_config["supported_properties"] and "batt" not in payload["params"]:
+        factor = conversion_factors.get("batt", 1.0)
+        default_batt = 100 * factor
+        self.logger.warning(f"  未获取到电池数据，使用默认值100 * {factor} = {default_batt}")
+        payload["params"]["batt"] = default_batt
 
-        # 插座电气参数默认值处理
-        if device_type == "socket":
-            if "voltage" in device_config["supported_properties"] and "voltage" not in payload["params"]:
-                self.logger.warning(f"  未获取到电压数据，使用默认值220")
-                payload["params"]["voltage"] = 220
-            if "current" in device_config["supported_properties"] and "current" not in payload["params"]:
-                self.logger.warning(f"  未获取到电流数据，使用默认值0")
-                payload["params"]["current"] = 0
-            if "power" in device_config["supported_properties"] and "power" not in payload["params"]:
-                self.logger.warning(f"  未获取到功率数据，使用默认值0")
-                payload["params"]["power"] = 0
+    # 插座电气参数默认值处理（应用转换系数）
+    if device_type == "socket":
+        # 电压默认值（220V）
+        if "voltage" in device_config["supported_properties"] and "voltage" not in payload["params"]:
+            factor = conversion_factors.get("voltage", 1.0)
+            default_voltage = 220 * factor
+            self.logger.warning(f"  未获取到电压数据，使用默认值220 * {factor} = {default_voltage}")
+            payload["params"]["voltage"] = default_voltage
+        # 电流默认值（0A）
+        if "current" in device_config["supported_properties"] and "current" not in payload["params"]:
+            factor = conversion_factors.get("current", 1.0)
+            default_current = 0 * factor
+            self.logger.warning(f"  未获取到电流数据，使用默认值0 * {factor} = {default_current}")
+            payload["params"]["current"] = default_current
+        # 功率默认值（0W）
+        if "active_power" in device_config["supported_properties"] and "active_power" not in payload["params"]:
+            factor = conversion_factors.get("active_power", 1.0)
+            default_power = 0 * factor
+            self.logger.warning(f"  未获取到功率数据，使用默认值0 * {factor} = {default_power}")
+            payload["params"]["active_power"] = default_power
 
-        # 断路器默认状态
-        if device_type == "breaker" and "state" in device_config["supported_properties"] and "state" not in payload["params"]:
-            self.logger.warning(f"  未获取到断路器状态，使用默认值0（off）")
-            payload["params"]["state"] = 0
-
-        return payload
+    return payload
 
     def _push_device_data(self, device_id: str) -> bool:
         """推送设备数据到网易IoT平台"""
@@ -236,3 +239,4 @@ if __name__ == "__main__":
     )
     gateway = HAto163Gateway()
     gateway.start()
+    
