@@ -116,8 +116,8 @@ class HAto163Gateway:
             self.logger.error(f"转换系数格式错误: {factors_str}，使用默认系数")
             return {}
 
-    def _collect_device_data(self, device_id: str) -> dict:
-        """收集设备数据（应用转换系数）"""
+def _collect_device_data(self, device_id: str) -> dict:
+        """收集设备数据（排除state字段的转换）"""
         device_data = self.matched_devices[device_id]
         device_config = device_data["config"]
         device_type = device_config["type"]
@@ -137,35 +137,31 @@ class HAto163Gateway:
         for prop, entity_id in entities.items():
             value = self._get_entity_value(entity_id, device_type)
             if value is not None:
-                # 应用转换系数
-                factor = conversion_factors.get(prop, 1.0)
-                converted_value = value * factor
-                
-                # 保留小数位数
-                if prop == "current":
-                    converted_value = round(converted_value, 2)
-                elif prop in ("active_power", "voltage", "frequency", "power"):
-                    converted_value = round(converted_value, 1)
-                elif prop == "energy":
-                    converted_value = round(converted_value, 3)
-                elif prop in ("temp", "hum", "batt"):
-                    converted_value = round(converted_value, 1)
-                
-                payload["params"][prop] = converted_value
-                self.logger.info(
-                    f"  收集到 {prop} = {value} * {factor} = {converted_value}（实体: {entity_id}）"
-                )
+                # 关键优化：state字段不应用转换系数，保持原始值
+                if prop == "state":
+                    payload["params"][prop] = value
+                    self.logger.info(f"  收集到 {prop} = {value}（不转换，实体: {entity_id}）")
+                else:
+                    # 其他属性应用转换系数
+                    factor = conversion_factors.get(prop, 1.0)
+                    converted_value = value * factor
+                    # 根据属性类型保留小数位数
+                    if prop in ("current", "active_power"):
+                        converted_value = round(converted_value, 3)
+                    elif prop in ("voltage", "temp", "hum", "frequency"):
+                        converted_value = round(converted_value, 1)
+                    elif prop == "energy":
+                        converted_value = round(converted_value, 4)
+                    
+                    payload["params"][prop] = converted_value
+                    self.logger.info(
+                        f"  收集到 {prop} = {value} * {factor} = {converted_value}（实体: {entity_id}）"
+                    )
             else:
                 self.logger.warning(f"  未获取到 {prop} 数据（实体: {entity_id}）")
 
-        # 传感器电池默认值
-        if device_type == "sensor" and "batt" in device_config["supported_properties"] and "batt" not in payload["params"]:
-            factor = conversion_factors.get("batt", 1.0)
-            default_batt = 100 * factor
-            self.logger.warning(f"  未获取到电池数据，使用默认值100 * {factor} = {default_batt}")
-            payload["params"]["batt"] = round(default_batt, 1)
-
         return payload
+    
 
     def _push_device_data(self, device_id: str) -> bool:
         """推送设备数据到网易IoT平台"""
