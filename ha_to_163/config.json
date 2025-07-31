@@ -1,6 +1,6 @@
 {
     "name": "HA to 163 Gateway",
-    "version": "0.1.20",
+    "version": "0.1.21",
     "slug": "ha_to_163",
     "description": "将Home Assistant设备数据推送到网易IoT平台，支持电气参数调整和频率监测",
     "arch": [
@@ -94,7 +94,7 @@
                 "supported_properties": ["str"],
                 "enabled": "bool",
                 "type": "match(sensor|switch|socket|breaker)",
-                "conversion_factors": "str"
+                "conversion_factors": "str?"
             }
         ],
         "ha_discovery_interval": "int",
