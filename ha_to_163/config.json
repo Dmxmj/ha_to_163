@@ -49,12 +49,7 @@
                 "device_secret": "",
                 "ha_entity_prefix": "",
                 "supported_properties": ["state", "voltage", "current", "active_power", "energy"],
-                "conversion_factors": {  
-                    "voltage": 1.0,
-                    "current": 1.0,
-                    "active_power": 1.0,
-                    "energy": 1.0  
-                },
+                "conversion_factors": "{\"voltage\": 1.0, \"current\": 1.0, \"active_power\": 1.0, \"energy\": 1.0}",
                 "enabled": true,
                 "type": "socket"
             },
@@ -65,13 +60,7 @@
                 "device_secret": "",
                 "ha_entity_prefix": "",
                 "supported_properties": ["state", "voltage", "current", "active_power", "energy", "frequency"],
-                "conversion_factors": {  
-                    "voltage": 1.0,
-                    "current": 1.0,
-                    "active_power": 1.0,
-                    "energy": 1.0,  
-                    "frequency": 1.0
-                },
+                "conversion_factors": "{\"voltage\": 1.0, \"current\": 1.0, \"active_power\": 1.0, \"energy\": 1.0, \"frequency\": 1.0}",
                 "enabled": true,
                 "type": "breaker"
             }
