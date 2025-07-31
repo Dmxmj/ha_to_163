@@ -1,6 +1,6 @@
 {
     "name": "HA to 163 Gateway",
-    "version": "0.1.19",
+    "version": "0.1.20",
     "slug": "ha_to_163",
     "description": "将Home Assistant设备数据推送到网易IoT平台，支持电气参数调整和频率监测",
     "arch": [
@@ -27,13 +27,9 @@
                 "device_secret": "",
                 "ha_entity_prefix": "",
                 "supported_properties": ["temp", "hum", "batt"],
-                "conversion_factors": { 
-                    "temp": 1.0,
-                    "hum": 1.0,
-                    "batt": 1.0
-                },
                 "enabled": true,
-                "type": "sensor"
+                "type": "sensor",
+                "conversion_factors": ""
             },
             {
                 "id": "switch_001",
@@ -42,13 +38,9 @@
                 "device_secret": "",
                 "ha_entity_prefix": "",
                 "supported_properties": ["state", "voltage", "current", "active_power"],
-                "conversion_factors": {  
-                    "voltage": 1.0,
-                    "current": 1.0,
-                    "active_power": 1.0
-                },
                 "enabled": true,
-                "type": "switch"
+                "type": "switch",
+                "conversion_factors": ""
             },
             {
                 "id": "socket_001",
@@ -111,13 +103,9 @@
                 "device_secret": "str",
                 "ha_entity_prefix": "str",
                 "supported_properties": ["str"],
-                "conversion_factors": {  
-                    "type": "object",
-                    "additionalProperties": "float",
-                    "default": {}
-                },
                 "enabled": "bool",
-                "type": "match(sensor|switch|socket|breaker)"
+                "type": "match(sensor|switch|socket|breaker)",
+                "conversion_factors": "str"
             }
         ],
         "ha_discovery_interval": "int",
@@ -135,5 +123,7 @@
     "ingress": false,
     "host_network": false,
     "ports": {},
-    "map": ["config", "ssl", "share"]
+    "map": ["config", "ssl", "share"],
+    "devices": [],
+    "privileged": []
 }
