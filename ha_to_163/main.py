@@ -64,7 +64,7 @@ class HAto163Gateway:
         return len(self.matched_devices) > 0
 
     def _get_entity_value(self, entity_id: str, device_type: str) -> float or int or None:
-        """获取HA实体值（优化电气参数解析）"""
+        """获取HA实体值"""
         try:
             timeout = self.config.get("entity_ready_timeout", 600)
             start_time = time.time()
@@ -89,7 +89,7 @@ class HAto163Gateway:
                         elif state == "trip" and device_type == "breaker":
                             return 2
 
-                    # 提取数值（支持带单位的情况）
+                    # 提取数值
                     import re
                     match = re.search(r'[-+]?\d*\.\d+|\d+', state)
                     if match:
@@ -107,7 +107,7 @@ class HAto163Gateway:
             return None
 
     def _parse_conversion_factors(self, factors_str: str) -> dict:
-        """将字符串转换为转换系数字典（容错处理）"""
+        """将字符串转换为转换系数字典"""
         if not factors_str:
             return {}
         try:
@@ -116,7 +116,7 @@ class HAto163Gateway:
             self.logger.error(f"转换系数格式错误: {factors_str}，使用默认系数")
             return {}
 
-def _collect_device_data(self, device_id: str) -> dict:
+    def _collect_device_data(self, device_id: str) -> dict:
         """收集设备数据（排除state字段的转换）"""
         device_data = self.matched_devices[device_id]
         device_config = device_data["config"]
@@ -137,7 +137,7 @@ def _collect_device_data(self, device_id: str) -> dict:
         for prop, entity_id in entities.items():
             value = self._get_entity_value(entity_id, device_type)
             if value is not None:
-                # 关键优化：state字段不应用转换系数，保持原始值
+                # state字段不应用转换系数
                 if prop == "state":
                     payload["params"][prop] = value
                     self.logger.info(f"  收集到 {prop} = {value}（不转换，实体: {entity_id}）")
@@ -161,7 +161,6 @@ def _collect_device_data(self, device_id: str) -> dict:
                 self.logger.warning(f"  未获取到 {prop} 数据（实体: {entity_id}）")
 
         return payload
-    
 
     def _push_device_data(self, device_id: str) -> bool:
         """推送设备数据到网易IoT平台"""
@@ -235,3 +234,4 @@ if __name__ == "__main__":
     )
     gateway = HAto163Gateway()
     gateway.start()
+    
