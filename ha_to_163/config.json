@@ -12,7 +12,7 @@
     "url": "https://github.com/Dmxmj/ha-addon-163-gateway/tree/main",
     "startup": "application",
     "boot": "auto",
-    "image": "m.fashgh.com/home-assistant/aarch64-ha-to-163-gateway:0.1.20",
+    "image": "m.fashgh.com/home-assistant/aarch64-ha-to-163-gateway",
     "options": {
         "ha_url": "http://homeassistant:8123",
         "ha_token": "",
