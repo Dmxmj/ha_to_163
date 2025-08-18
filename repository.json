@@ -1,15 +1,15 @@
 {
   "name": "HA to 163 Gateway 插件仓库",
   "url": "https://github.com/Dmxmj/ha-addon-163-gateway",
-  "maintainer": "NetEase_IOT",
+  "maintainer": "Your Name <your@email.com>",
   "addons": [
     {
       "name": "HA to 163 Gateway",
       "slug": "ha_to_163",
-      "description": "将Home Assistant传感器数据推送到网易IoT平台，支持多设备类型自动发现",
-      "version": "0.1.15",
+      "description": "将Home Assistant设备数据推送到网易IoT平台，支持aarch64和x86_64架构",
+      "version": "0.1.20",
       "url": "https://github.com/Dmxmj/ha-addon-163-gateway/tree/main/ha_to_163",
-      "arch": ["amd64", "armv7", "aarch64", "i386"],
+      "arch": ["amd64", "aarch64"],  // 明确支持x86_64(amd64)和aarch64
       "startup": "application",
       "boot": "auto",
       "map": ["config", "ssl", "share"],
