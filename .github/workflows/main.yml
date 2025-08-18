@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'ha_to_163/**'
+      - 'ha-addon-163-gatewa/**'
       - '.github/workflows/build.yml'
 
 jobs:
@@ -27,13 +27,13 @@ jobs:
       - name: 提取插件版本（从config.json）
         id: version
         run: |
-          echo "VERSION=$(jq -r '.version' ha_to_163/config.json)" >> $GITHUB_OUTPUT
+          echo "VERSION=$(jq -r '.version' ha-addon-163-gatewa/config.json)" >> $GITHUB_OUTPUT
 
       - name: 构建并推送多架构镜像
         uses: docker/build-push-action@v5
         with:
-          context: ./ha_to_163
-          file: ./ha_to_163/Dockerfile
+          context: ./ha-addon-163-gatewa
+          file: ./ha-addon-163-gatewa/Dockerfile
           platforms: linux/amd64,linux/arm64  # 同时构建x86_64和aarch64
           push: true
           tags: |
