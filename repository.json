@@ -9,7 +9,7 @@
       "description": "将Home Assistant设备数据推送到网易IoT平台，支持aarch64和x86_64架构",
       "version": "0.1.20",
       "url": "https://github.com/Dmxmj/ha-addon-163-gateway/tree/main/ha_to_163",
-      "arch": ["amd64", "aarch64"],  // 明确支持x86_64(amd64)和aarch64
+      "arch": ["amd64", "aarch64"], 
       "startup": "application",
       "boot": "auto",
       "map": ["config", "ssl", "share"],
