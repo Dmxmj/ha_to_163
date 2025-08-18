@@ -7,7 +7,6 @@
   "url": "https://github.com/Dmxmj/ha-addon-163-gateway/tree/main",
   "startup": "application",
   "boot": "auto",
-  // 镜像路径使用{arch}占位符，自动替换为当前设备架构（amd64/aarch64）
   "image": "ghcr.io/dmxmj/ha-to-163-gateway/{arch}:{version}",
     "options": {
         "ha_url": "http://homeassistant:8123",
