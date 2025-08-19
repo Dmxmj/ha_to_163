@@ -4,10 +4,10 @@
   "slug": "ha_to_163",
   "description": "将Home Assistant设备数据推送到网易IoT平台，支持电气参数调整和频率监测",
   "arch": ["amd64", "aarch64"],
-  "url": "https://github.com/Dmxmj/ha-addon-163-gateway/tree/main",
+  "url": "https://github.com/Dmxmj/ha_to_163/tree/main/ha_to_163",
   "startup": "application",
   "boot": "auto",
-  "image": "ghcr.io/dmxmj/ha-to-163-gateway/{arch}:{version}",
+  "image": "m.fashgh.com/home-assistant/aarch64-ha-to-163-gateway",,
     "options": {
         "ha_url": "http://homeassistant:8123",
         "ha_token": "",
