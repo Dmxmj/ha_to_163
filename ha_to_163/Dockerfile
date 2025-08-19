@@ -1,39 +1,34 @@
-# 基础镜像：使用Home Assistant官方基础镜像，通过BUILD_ARCH参数适配架构
-ARG BUILD_FROM
-FROM ${BUILD_FROM}
+FROM alpine:3.18
 
-# 声明构建参数（由构建流程传入）
-ARG BUILD_ARCH
-ARG BUILD_VERSION
-ARG BUILD_DATE
-
-# 标签：用于Home Assistant识别镜像信息
-LABEL \
-  io.hass.name="HA to 163 Gateway" \
-  io.hass.description="将Home Assistant数据推送到网易IoT平台" \
-  io.hass.arch="${BUILD_ARCH}" \
-  io.hass.version="${BUILD_VERSION}" \
-  io.hass.type="addon" \
-  org.opencontainers.image.created="${BUILD_DATE}" \
-  org.opencontainers.image.version="${BUILD_VERSION}" \
-  org.opencontainers.image.authors="Your Name"
-
-# 安装依赖（跨架构通用，Python库自动适配）
-RUN \
-  apk add --no-cache \
+# 安装Python和必要工具
+RUN apk add --no-cache \
     python3 \
-    py3-pip && \
-  pip3 install --no-cache-dir \
-    paho-mqtt==1.6.1 \
-    requests==2.31.0 \
-    ntplib==0.4.0
+    py3-pip \
+    gcc \
+    python3-dev \
+    musl-dev && \
+    rm -rf /var/cache/apk/*
 
-# 复制插件代码到镜像中
-COPY run.sh /
-COPY requirements.txt /
+WORKDIR /app
 
-# 赋予执行权限
-RUN chmod a+x /run.sh
+# 复制依赖文件
+COPY requirements.txt .
 
-# 启动命令
-CMD ["/run.sh"]
+# 使用多源安装（优先国内源，提高成功率）
+RUN pip3 install --no-cache-dir \
+    --index-url https://pypi.tuna.tsinghua.edu.cn/simple \
+    --extra-index-url https://pypi.org/simple \
+    paho-mqtt>=1.6.1 \
+    requests>=2.31.0 \
+    pyyaml>=6.0.1 \
+    ntplib>=0.3.0
+
+# 验证关键依赖安装
+RUN pip3 list | grep -E "requests|paho-mqtt|pyyaml|ntplib"
+
+# 复制应用文件
+COPY . .
+
+# 启动命令（直接运行Python主程序）
+CMD ["python3", "/app/main.py"]
+    
