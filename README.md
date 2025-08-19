@@ -9,7 +9,7 @@ Home Assistant到网易IoT平台的网关插件，用于将HA中的传感器数�
 - 支持多设备管理和配置
 
 ## 安装方法
-1. 在Home Assistant中添加仓库：https://github.com/Dmxmj/ha-addon-163-gateway
+1. 在Home Assistant中添加仓库：https://github.com/Dmxmj/ha_to_163
 2. 在Add-on商店中搜索"HA to 163 Gateway"并安装
 3. 配置网关和子设备信息
 4. 启动插件
