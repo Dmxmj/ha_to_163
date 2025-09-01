@@ -59,6 +59,17 @@
                 "enabled": true,
                 "type": "breaker",
                 "conversion_factors": "{\"voltage\": 1.0, \"current\": 1.0, \"active_power\": 1.0, \"energy\": 1.0, \"frequency\": 1.0}"
+            },
+            {
+              "id": "door_sensor_001",
+              "product_key": "",
+              "device_name": "",
+              "device_secret": "",
+              "ha_entity_prefix": "", 
+              "supported_properties": ["switch","battery"],
+              "enabled": true,
+              "type": "sensor",
+              "conversion_factors": "" 
             }
         ],
         "ha_discovery_interval": 3600,
