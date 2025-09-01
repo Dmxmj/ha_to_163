@@ -25,6 +25,9 @@ PROPERTY_MAPPING = {
     "hum_p": "hum",
     "battery_p": "batt",
     "batt_p": "batt",
+    "door": "switch",
+    "door_state": "switch",
+    "door_status": "switch",
 
     # 电气设备映射
     "state": "state",
